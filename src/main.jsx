@@ -1,9 +1,9 @@
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './index.css'
-import HomePage from './Homepage'
+import HomePage from './HomePage'
 import RobotApp from './RobotApp'
-import ProfilePage from './Profilepage'
+import ProfilePage from './ProfilePage'
 import DrawApp from './Drawapp'
 import { CreateAccountPage, LoginPage } from './AuthPages'
 
