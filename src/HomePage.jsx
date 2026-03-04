@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { AccountMenu, useProfile, Avatar } from "./useProfile";
 
@@ -35,18 +35,45 @@ const DrawIllustration = () => (
 );
 
 const Stars = () => {
-  const stars = Array.from({ length: 25 }, (_, i) => ({
+  const stars = Array.from({ length: 30 }, (_, i) => ({
     id: i, x: Math.random()*100, y: Math.random()*100,
     size: Math.random()*2+0.5, delay: Math.random()*3, duration: Math.random()*2+2,
   }));
   return (
     <div style={{ position:"fixed", inset:0, overflow:"hidden", pointerEvents:"none", zIndex:0 }}>
       {stars.map(s => (
-        <div key={s.id} style={{ position:"absolute", left:`${s.x}%`, top:`${s.y}%`, width:s.size, height:s.size, borderRadius:"50%", background:"#fff", opacity:0.4, animation:`twinkle ${s.duration}s ${s.delay}s ease-in-out infinite alternate` }} />
+        <div key={s.id} style={{ position:"absolute", left:`${s.x}%`, top:`${s.y}%`, width:s.size, height:s.size, borderRadius:"50%", background:"#fff", opacity:0.35, animation:`twinkle ${s.duration}s ${s.delay}s ease-in-out infinite alternate` }} />
       ))}
     </div>
   );
 };
+
+const MODES = [
+  {
+    type: "program",
+    title: "البرمجة",
+    emoji: "⚙️",
+    desc: "استخدم الكتل البرمجية للتحكم في الروبوت وتعليمه ما تريد!",
+    btnLabel: "ابدأ البرمجة",
+    bg: "linear-gradient(160deg, #1a1040 0%, #2a1a6e 60%, #0f0a2e 100%)",
+    border: "rgba(108,99,255,0.6)",
+    glow: "rgba(108,99,255,0.35)",
+    btnBg: "linear-gradient(135deg,#6C63FF,#9C63FF)",
+    illustration: <ProgramIllustration />,
+  },
+  {
+    type: "draw",
+    title: "ارسم واتبع",
+    emoji: "✏️",
+    desc: "ارسم مساراً بيدك وشاهد الروبوت يتبعه بدقة!",
+    btnLabel: "ابدأ الرسم",
+    bg: "linear-gradient(160deg, #0a2016 0%, #0d3320 60%, #051209 100%)",
+    border: "rgba(0,200,83,0.6)",
+    glow: "rgba(0,200,83,0.3)",
+    btnBg: "linear-gradient(135deg,#00C853,#00897B)",
+    illustration: <DrawIllustration />,
+  },
+];
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -60,6 +87,8 @@ export default function HomePage() {
   const [showSidebar, setShowSidebar] = useState(false);
   const [projects, setProjects]       = useState(JSON.parse(localStorage.getItem(projectsKey) || "[]"));
   const [error, setError]             = useState("");
+  const [activeIdx, setActiveIdx]     = useState(0);
+  const carouselRef                   = useRef(null);
 
   const openPrompt = (type) => { setProjectType(type); setProjectName(""); setError(""); setShowPrompt(true); };
 
@@ -85,94 +114,173 @@ export default function HomePage() {
     navigate(`/${project.type}`, { state: { projectName: project.name } });
   };
 
+  const handleScroll = (e) => {
+    const el = e.target;
+    const idx = Math.round(el.scrollLeft / el.offsetWidth);
+    setActiveIdx(idx);
+  };
+
+  const scrollTo = (idx) => {
+    if (carouselRef.current) {
+      carouselRef.current.scrollTo({ left: idx * carouselRef.current.offsetWidth, behavior:"smooth" });
+    }
+    setActiveIdx(idx);
+  };
+
+  const activeMode = MODES[activeIdx] || MODES[0];
+
   return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;600;700;800;900&family=Fredoka+One&display=swap');
         *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
-        html, body, #root { min-height:100%; width:100%; background:#07090f; }
-        @keyframes twinkle  { from{opacity:0.2} to{opacity:0.8} }
-        @keyframes floatUp  { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes titlePop { 0%{opacity:0;transform:scale(0.88)} 100%{opacity:1;transform:scale(1)} }
+        html, body, #root { height:100%; width:100%; overflow:hidden; background:#07090f; }
+
+        @keyframes twinkle  { from{opacity:0.15} to{opacity:0.7} }
+        @keyframes fadeIn   { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
         @keyframes shimmer  { 0%{background-position:-200% center} 100%{background-position:200% center} }
         @keyframes slideIn  { from{opacity:0;transform:translateX(-100%)} to{opacity:1;transform:translateX(0)} }
         @keyframes popIn    { from{opacity:0;transform:translate(-50%,-50%) scale(0.9)} to{opacity:1;transform:translate(-50%,-50%) scale(1)} }
+        @keyframes slideUp  { from{transform:translateY(100%)} to{transform:translateY(0)} }
 
-        .mode-card {
-          cursor:pointer; border-radius:20px; padding:20px 18px;
-          display:flex; flex-direction:column; align-items:center; gap:12px;
-          position:relative; overflow:hidden;
-          transition:transform 0.25s, box-shadow 0.25s;
-          animation:floatUp 0.6s ease both;
+        /* Carousel */
+        .carousel {
+          display: flex;
+          width: 100%;
+          height: 100%;
+          overflow-x: scroll;
+          scroll-snap-type: x mandatory;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
         }
-        .mode-card:active { transform:scale(0.97) !important; }
-        @media(hover:hover){ .mode-card:hover { transform:translateY(-6px) scale(1.02); } }
-        .card-program { background:linear-gradient(145deg,#1a1040,#0f0a2e); border:2px solid rgba(108,99,255,0.4); box-shadow:0 8px 32px rgba(108,99,255,0.2); animation-delay:0.1s; }
-        .card-draw    { background:linear-gradient(145deg,#0a2016,#051209); border:2px solid rgba(0,200,83,0.4); box-shadow:0 8px 32px rgba(0,200,83,0.15); animation-delay:0.22s; }
-        .btn-program  { background:linear-gradient(135deg,#6C63FF,#9C63FF); box-shadow:0 4px 16px rgba(108,99,255,0.4); }
-        .btn-draw     { background:linear-gradient(135deg,#00C853,#00897B); box-shadow:0 4px 16px rgba(0,200,83,0.35); }
+        .carousel::-webkit-scrollbar { display: none; }
+
+        .carousel-slide {
+          flex: 0 0 100%;
+          width: 100%;
+          height: 100%;
+          scroll-snap-align: center;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 20px 24px 28px;
+          position: relative;
+          overflow: hidden;
+          transition: opacity 0.3s;
+        }
+
+        .card-inner {
+          width: 100%;
+          max-width: 480px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 18px;
+          animation: fadeIn 0.5s ease both;
+        }
+
+        .start-btn {
+          width: 100%; padding: 15px 0;
+          border: none; color: #fff; border-radius: 16px;
+          font-size: clamp(15px,4vw,18px); font-weight: 800;
+          cursor: pointer; font-family: 'Tajawal',sans-serif;
+          touch-action: manipulation;
+          transition: transform 0.15s, box-shadow 0.15s;
+          letter-spacing: 0.5px;
+        }
+        .start-btn:active { transform: scale(0.97); }
+
+        .dot { width:8px; height:8px; border-radius:50%; cursor:pointer; transition:all 0.3s; border:none; }
+        .dot.active { width:24px; border-radius:4px; }
+
         .project-item:hover { background:rgba(255,255,255,0.08) !important; }
       `}</style>
 
-      {/* Background */}
-      <div style={{ position:"fixed", inset:0, background:"radial-gradient(ellipse at 20% 30%,#0e0a2a 0%,#07090f 60%)", zIndex:0 }} />
+      {/* Fixed BG */}
+      <div style={{ position:"fixed", inset:0, zIndex:0, transition:"background 0.6s ease", background: activeMode.bg }} />
       <Stars />
 
-      {/* Scrollable container */}
-      <div style={{ position:"relative", zIndex:1, minHeight:"100vh", display:"flex", flexDirection:"column", fontFamily:"'Tajawal',sans-serif", color:"#fff", direction:"rtl" }}>
+      <div style={{ position:"relative", zIndex:1, height:"100vh", width:"100vw", display:"flex", flexDirection:"column", fontFamily:"'Tajawal',sans-serif", color:"#fff", direction:"rtl", overflow:"hidden" }}>
 
-        {/* Top bar */}
-        <div style={{ position:"sticky", top:0, zIndex:50, height:52, background:"rgba(7,9,15,0.88)", backdropFilter:"blur(14px)", borderBottom:"1px solid rgba(255,255,255,0.06)", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 14px", flexShrink:0 }}>
+        {/* TOP BAR */}
+        <div style={{ height:56, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 16px", background:"rgba(0,0,0,0.25)", backdropFilter:"blur(12px)", borderBottom:"1px solid rgba(255,255,255,0.06)", zIndex:20 }}>
           <button onClick={() => setShowSidebar(true)}
-            style={{ width:40, height:40, borderRadius:12, background:"rgba(108,99,255,0.15)", border:"1.5px solid rgba(108,99,255,0.35)", color:"#fff", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:3, touchAction:"manipulation" }}>
+            style={{ width:40, height:40, borderRadius:12, background:"rgba(255,255,255,0.1)", border:"1.5px solid rgba(255,255,255,0.15)", color:"#fff", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:3, touchAction:"manipulation" }}>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/></svg>
             <span style={{ fontSize:9, fontWeight:800 }}>{projects.length}</span>
           </button>
+
+          <h1 style={{ fontFamily:"'Fredoka One',cursive", fontSize:"clamp(16px,4vw,22px)", background:"linear-gradient(90deg,#fff,rgba(255,255,255,0.7))", backgroundClip:"text", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
+            🤖 روبوت كيدز
+          </h1>
+
           <AccountMenu navigate={navigate} />
         </div>
 
-        {/* Content */}
-        <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"28px 16px 40px" }}>
+        {/* CAROUSEL */}
+        <div ref={carouselRef} className="carousel" onScroll={handleScroll} style={{ flex:1 }}>
+          {MODES.map((mode, idx) => (
+            <div key={mode.type} className="carousel-slide">
+              {/* Glow orb */}
+              <div style={{ position:"absolute", top:"10%", left:"50%", transform:"translateX(-50%)", width:"60vw", height:"60vw", maxWidth:400, maxHeight:400, borderRadius:"50%", background:`radial-gradient(circle, ${mode.glow} 0%, transparent 70%)`, pointerEvents:"none" }} />
 
-          {/* Title */}
-          <div style={{ textAlign:"center", marginBottom:28, animation:"titlePop 0.5s ease both" }}>
-            <div style={{ fontSize:11, letterSpacing:4, color:"rgba(255,255,255,0.4)", fontWeight:700, marginBottom:8, textTransform:"uppercase" }}>🤖 مرحباً بك</div>
-            <h1 style={{ fontFamily:"'Tajawal',sans-serif", fontSize:"clamp(24px,7vw,48px)", fontWeight:900, lineHeight:1.2, background:"linear-gradient(135deg,#fff 0%,#a78bfa 40%,#00E5FF 80%,#fff 100%)", backgroundSize:"200% auto", backgroundClip:"text", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", animation:"shimmer 4s linear infinite" }}>
-              لنبرمج معاً! 🚀
-            </h1>
-            <p style={{ marginTop:8, color:"rgba(255,255,255,0.45)", fontSize:"clamp(13px,3.5vw,16px)", fontWeight:600 }}>اختر نشاطك المفضل</p>
-          </div>
+              <div className="card-inner">
+                {/* Big illustration card */}
+                <div style={{
+                  width:"100%",
+                  background:"rgba(0,0,0,0.3)",
+                  border:`2px solid ${mode.border}`,
+                  borderRadius:28,
+                  padding:"24px 20px 20px",
+                  backdropFilter:"blur(10px)",
+                  boxShadow:`0 12px 48px ${mode.glow}`,
+                  display:"flex", flexDirection:"column", gap:16,
+                }}>
+                  {/* Illustration */}
+                  <div style={{ width:"100%", height:"clamp(140px,30vw,220px)", borderRadius:16, overflow:"hidden" }}>
+                    {mode.illustration}
+                  </div>
 
-          {/* Cards grid — 1 col on mobile, 2 on tablet+ */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))", gap:16, width:"100%", maxWidth:700 }}>
-            <div className="mode-card card-program" onClick={() => openPrompt("program")}>
-              <div style={{ width:"100%", height:120 }}><ProgramIllustration /></div>
-              <div style={{ textAlign:"center" }}>
-                <div style={{ fontSize:22, marginBottom:4 }}>⚙️</div>
-                <h2 style={{ fontFamily:"'Tajawal',sans-serif", fontSize:"clamp(17px,4vw,21px)", fontWeight:800, color:"#fff", marginBottom:5 }}>البرمجة</h2>
-                <p style={{ fontSize:"clamp(12px,3vw,13px)", color:"rgba(255,255,255,0.5)", lineHeight:1.6, fontWeight:600 }}>استخدم الكتل البرمجية للتحكم في الروبوت!</p>
+                  {/* Info */}
+                  <div style={{ textAlign:"center" }}>
+                    <div style={{ fontSize:"clamp(28px,7vw,40px)", marginBottom:6 }}>{mode.emoji}</div>
+                    <h2 style={{ fontFamily:"'Tajawal',sans-serif", fontSize:"clamp(20px,5vw,28px)", fontWeight:900, color:"#fff", marginBottom:8 }}>
+                      {mode.title}
+                    </h2>
+                    <p style={{ fontSize:"clamp(13px,3vw,15px)", color:"rgba(255,255,255,0.6)", lineHeight:1.7, fontWeight:600 }}>
+                      {mode.desc}
+                    </p>
+                  </div>
+                </div>
+
+                {/* CTA Button */}
+                <button className="start-btn"
+                  style={{ background: mode.btnBg, boxShadow:`0 6px 24px ${mode.glow}` }}
+                  onClick={() => openPrompt(mode.type)}>
+                  {mode.btnLabel} ←
+                </button>
               </div>
-              <button className="btn-program" style={{ width:"100%", padding:"12px 0", border:"none", color:"#fff", borderRadius:12, fontSize:15, fontWeight:800, cursor:"pointer", fontFamily:"'Tajawal',sans-serif", touchAction:"manipulation" }}>ابدأ البرمجة ←</button>
             </div>
+          ))}
+        </div>
 
-            <div className="mode-card card-draw" onClick={() => openPrompt("draw")}>
-              <div style={{ width:"100%", height:120 }}><DrawIllustration /></div>
-              <div style={{ textAlign:"center" }}>
-                <div style={{ fontSize:22, marginBottom:4 }}>✏️</div>
-                <h2 style={{ fontFamily:"'Tajawal',sans-serif", fontSize:"clamp(17px,4vw,21px)", fontWeight:800, color:"#fff", marginBottom:5 }}>ارسم واتبع</h2>
-                <p style={{ fontSize:"clamp(12px,3vw,13px)", color:"rgba(255,255,255,0.5)", lineHeight:1.6, fontWeight:600 }}>ارسم مساراً وشاهد الروبوت يتبعه!</p>
-              </div>
-              <button className="btn-draw" style={{ width:"100%", padding:"12px 0", border:"none", color:"#fff", borderRadius:12, fontSize:15, fontWeight:800, cursor:"pointer", fontFamily:"'Tajawal',sans-serif", touchAction:"manipulation" }}>ابدأ الرسم ←</button>
-            </div>
-          </div>
+        {/* DOTS INDICATOR */}
+        <div style={{ height:40, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", gap:8, background:"rgba(0,0,0,0.2)" }}>
+          {MODES.map((_, idx) => (
+            <button key={idx} className={`dot ${activeIdx===idx?"active":""}`}
+              style={{ background: activeIdx===idx ? "#fff" : "rgba(255,255,255,0.3)" }}
+              onClick={() => scrollTo(idx)}
+            />
+          ))}
         </div>
       </div>
 
-      {/* Sidebar */}
+      {/* SIDEBAR */}
       {showSidebar && (
         <>
-          <div onClick={() => setShowSidebar(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:200 }} />
-          <div style={{ position:"fixed", left:0, top:0, bottom:0, width:"min(85vw,300px)", background:"#0d1117", borderRight:"1px solid rgba(255,255,255,0.08)", zIndex:210, display:"flex", flexDirection:"column", animation:"slideIn 0.28s ease both", boxShadow:"4px 0 30px rgba(0,0,0,0.6)" }}>
+          <div onClick={() => setShowSidebar(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:100 }} />
+          <div style={{ position:"fixed", left:0, top:0, bottom:0, width:"min(85vw,300px)", background:"#0d1117", borderRight:"1px solid rgba(255,255,255,0.08)", zIndex:110, display:"flex", flexDirection:"column", animation:"slideIn 0.28s ease both", boxShadow:"4px 0 30px rgba(0,0,0,0.6)" }}>
             <div style={{ padding:"18px 16px 14px", borderBottom:"1px solid rgba(255,255,255,0.08)", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <div>
                 <div style={{ fontFamily:"'Fredoka One',cursive", fontSize:17, color:"#fff" }}>مشاريعي 📁</div>
@@ -195,7 +303,7 @@ export default function HomePage() {
                     <div style={{ fontSize:13, fontWeight:800, color:"#fff", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{project.name}</div>
                     <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)", fontWeight:600 }}>{project.type==="program"?"برمجة":"رسم"} • {project.createdAt}</div>
                   </div>
-                  <button onClick={(e)=>handleDeleteProject(project.id,e)} style={{ background:"rgba(255,107,107,0.12)", border:"none", color:"#FF6B6B", borderRadius:8, width:26, height:26, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, flexShrink:0 }}>🗑</button>
+                  <button onClick={(e)=>handleDeleteProject(project.id,e)} style={{ background:"rgba(255,107,107,0.12)", border:"none", color:"#FF6B6B", borderRadius:8, width:26, height:26, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, flexShrink:0, touchAction:"manipulation" }}>🗑</button>
                 </div>
               ))}
             </div>
@@ -203,27 +311,27 @@ export default function HomePage() {
         </>
       )}
 
-      {/* New project modal */}
+      {/* NEW PROJECT MODAL */}
       {showPrompt && (
         <>
-          <div onClick={() => setShowPrompt(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.65)", zIndex:300 }} />
+          <div onClick={() => setShowPrompt(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:300 }} />
           <div style={{
             position:"fixed", top:"50%", left:"50%",
             transform:"translate(-50%,-50%)",
             width:"min(92vw,400px)",
             background:"#161b22",
-            border:`1.5px solid ${projectType==="program"?"rgba(108,99,255,0.4)":"rgba(0,200,83,0.4)"}`,
-            borderRadius:22, padding:"24px 20px",
+            border:`1.5px solid ${projectType==="program"?"rgba(108,99,255,0.5)":"rgba(0,200,83,0.5)"}`,
+            borderRadius:24, padding:"26px 22px",
             zIndex:310, animation:"popIn 0.22s ease both",
-            boxShadow:"0 24px 60px rgba(0,0,0,0.7)",
+            boxShadow:"0 24px 60px rgba(0,0,0,0.8)",
           }}>
-            <div style={{ textAlign:"center", marginBottom:16 }}>
-              <div style={{ fontSize:32, marginBottom:6 }}>{projectType==="program"?"⚙️":"✏️"}</div>
-              <h2 style={{ fontFamily:"'Tajawal',sans-serif", fontSize:19, fontWeight:900, color:"#fff", marginBottom:4 }}>مشروع جديد</h2>
+            <div style={{ textAlign:"center", marginBottom:18 }}>
+              <div style={{ fontSize:36, marginBottom:8 }}>{projectType==="program"?"⚙️":"✏️"}</div>
+              <h2 style={{ fontFamily:"'Tajawal',sans-serif", fontSize:20, fontWeight:900, color:"#fff", marginBottom:4 }}>مشروع جديد</h2>
               <p style={{ color:"rgba(255,255,255,0.4)", fontSize:13, fontWeight:600 }}>{projectType==="program"?"مشروع برمجة":"مشروع رسم واتبع"}</p>
             </div>
-            <div style={{ marginBottom:14 }}>
-              <label style={{ fontSize:13, fontWeight:700, color:"rgba(255,255,255,0.5)", fontFamily:"'Tajawal',sans-serif", display:"block", marginBottom:7 }}>اسم المشروع</label>
+            <div style={{ marginBottom:16 }}>
+              <label style={{ fontSize:13, fontWeight:700, color:"rgba(255,255,255,0.5)", fontFamily:"'Tajawal',sans-serif", display:"block", marginBottom:8 }}>اسم المشروع</label>
               <input
                 type="text" value={projectName}
                 onChange={e => { setProjectName(e.target.value); setError(""); }}
