@@ -28,11 +28,23 @@ export async function deleteProject(id) {
   await fetch(`${BASE}/api/projects/${id}`, { method: "DELETE", headers: authHeaders() });
 }
 
+// Save blocks XML to backend
 export async function saveBlocks(id, blocksSave) {
-  await fetch(`${BASE}/api/projects/${id}/blocks`, {
+  const res = await fetch(`${BASE}/api/projects/${id}/blocks`, {
     method: "PUT", headers: authHeaders(),
     body: JSON.stringify({ blocksSave }),
   });
+  if (!res.ok) throw new Error("فشل حفظ الكتل");
+  return res.json();
+}
+
+// Load blocks XML from backend — returns { blocksSave: "..." } or { blocksSave: "" }
+export async function loadBlocks(id) {
+  const res = await fetch(`${BASE}/api/projects/${id}/blocks`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("فشل تحميل الكتل");
+  return res.json();
 }
 
 // Save draw — sends { drawSave: { strokes, speed } }

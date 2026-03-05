@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import * as Blockly from "blockly";
 import { AccountMenu } from "./useProfile";
-import { saveBlocks } from "./api";
+import { saveBlocks, loadBlocks } from "./api";
 
 const ArrowBackIcon = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>);
 const UndoIcon      = () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>);
@@ -11,7 +11,6 @@ const PlayIcon      = () => (<svg width="18" height="18" viewBox="0 0 24 24" fil
 const SaveIcon      = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>);
 const MenuIcon      = () => (<svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>);
 
-/* Responsive robot icon — uses % sizes, no fixed px */
 const RobotIcon = ({ connected }) => (
   <svg viewBox="0 0 64 64" fill="none" style={{ width:"100%", height:"100%", maxWidth:64, maxHeight:64 }}>
     <rect x="16" y="20" width="32" height="28" rx="6" fill={connected?"#00C853":"#6C63FF"} stroke="#fff" strokeWidth="2"/>
@@ -28,7 +27,6 @@ const RobotIcon = ({ connected }) => (
   </svg>
 );
 
-/* ── LED patterns ── */
 const LED_PATTERNS={FULL:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],PLUS:[0,0,1,0,0,0,0,1,0,0,1,1,1,1,1,0,0,1,0,0,0,0,1,0,0],X:[1,0,0,0,1,0,1,0,1,0,0,0,1,0,0,0,1,0,1,0,1,0,0,0,1],HEART:[0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,0,0,1,0,0],SMILE:[0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1,0,0,0,1,0,1,1,1,0],ARROW_UP:[0,0,1,0,0,0,1,1,1,0,1,0,1,0,1,0,0,1,0,0,0,0,1,0,0]};
 function genLedIcon(key,size=40){const c=document.createElement("canvas");c.width=c.height=size;const ctx=c.getContext("2d");const g=LED_PATTERNS[key];const pad=2,ds=(size-pad*2)/5;ctx.fillStyle="#1565c0";ctx.roundRect(0,0,size,size,4);ctx.fill();for(let r=0;r<5;r++)for(let col=0;col<5;col++){ctx.beginPath();ctx.arc(pad+col*ds+ds*.5,pad+r*ds+ds*.5,ds*.35,0,Math.PI*2);ctx.fillStyle=g[r*5+col]?"#fff":"#1976d2";ctx.fill();}return c.toDataURL();}
 function buildLedOpts(){return Object.keys(LED_PATTERNS).map(k=>[{src:genLedIcon(k,40),width:40,height:40,alt:k},k]);}
@@ -92,62 +90,98 @@ export default function RobotApp() {
   const navigate    = useNavigate();
   const location    = useLocation();
   const projectName = location.state?.projectName || "مشروعي 🚀";
-  const projectId   = location.state?.projectId;    // MongoDB _id passed from HomePage
+  const projectId   = location.state?.projectId;
 
   const blocklyDivRef = useRef(null);
   const workspaceRef  = useRef(null);
 
-  const [connected,  setConnected]  = useState(false);
-  const [taskActive, setTaskActive] = useState(false);
-  const [saveStatus, setSaveStatus] = useState("");   // "" | "saving" | "saved" | "error"
-  const [blockCount, setBlockCount] = useState(0);
-  const [showPanel,  setShowPanel]  = useState(false);
+  const [connected,    setConnected]   = useState(false);
+  const [taskActive,   setTaskActive]  = useState(false);
+  const [saveStatus,   setSaveStatus]  = useState("");
+  const [blockCount,   setBlockCount]  = useState(0);
+  const [showPanel,    setShowPanel]   = useState(false);
+  const [loadingData,  setLoadingData] = useState(true);
+
+  // helper to inject saved XML into workspace
+  const loadXml = (xml) => {
+    if (!xml || !workspaceRef.current) return;
+    try {
+      Blockly.Xml.domToWorkspace(
+        Blockly.utils.xml.textToDom(xml),
+        workspaceRef.current
+      );
+    } catch (e) {}
+  };
 
   useEffect(() => {
     registerBlocks();
     const div = blocklyDivRef.current;
     if (!div) return;
-    const fid = requestAnimationFrame(() => {
+
+    const fid = requestAnimationFrame(async () => {
       workspaceRef.current = Blockly.inject(div, {
-        toolbox:TOOLBOX, scrollbars:true, trashcan:true,
-        zoom:{controls:true,wheel:true,startScale:0.9,maxScale:3,minScale:0.3,scaleSpeed:1.2},
-        grid:{spacing:20,length:3,colour:"rgba(255,255,255,0.05)",snap:true},
-        theme: Blockly.Theme.defineTheme("dark",{
-          base:Blockly.Themes.Classic,
-          componentStyles:{ workspaceBackgroundColour:"#161b22",toolboxBackgroundColour:"#0d1117",toolboxForegroundColour:"#ffffff",flyoutBackgroundColour:"#1c2128",flyoutForegroundColour:"#ffffff",flyoutOpacity:0.97,scrollbarColour:"rgba(255,255,255,0.2)" },
+        toolbox: TOOLBOX, scrollbars: true, trashcan: true,
+        zoom: { controls:true, wheel:true, startScale:0.9, maxScale:3, minScale:0.3, scaleSpeed:1.2 },
+        grid: { spacing:20, length:3, colour:"rgba(255,255,255,0.05)", snap:true },
+        theme: Blockly.Theme.defineTheme("dark", {
+          base: Blockly.Themes.Classic,
+          componentStyles: {
+            workspaceBackgroundColour:"#161b22", toolboxBackgroundColour:"#0d1117",
+            toolboxForegroundColour:"#ffffff", flyoutBackgroundColour:"#1c2128",
+            flyoutForegroundColour:"#ffffff", flyoutOpacity:0.97,
+            scrollbarColour:"rgba(255,255,255,0.2)",
+          },
         }),
       });
       Blockly.svgResize(workspaceRef.current);
+      workspaceRef.current.addChangeListener(() =>
+        setBlockCount(workspaceRef.current?.getAllBlocks(false).length ?? 0)
+      );
 
-      // Load saved blocks from backend project object (passed via state or fall back to localStorage)
-      const saved = location.state?.blocksSave || localStorage.getItem(`blocks_${projectId||projectName}`);
-      if (saved) { try { Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(saved), workspaceRef.current); } catch(e){} }
-
-      workspaceRef.current.addChangeListener(() => setBlockCount(workspaceRef.current?.getAllBlocks(false).length??0));
+      // ── Load from backend ──────────────────────────────────────
+      if (projectId) {
+        try {
+          const data = await loadBlocks(projectId);
+          if (data?.blocksSave) loadXml(data.blocksSave);
+        } catch (e) {}
+      }
+      setLoadingData(false);
       setBlockCount(workspaceRef.current.getAllBlocks(false).length);
     });
-    const onResize=()=>{ if(workspaceRef.current) Blockly.svgResize(workspaceRef.current); };
-    window.addEventListener("resize",onResize);
-    return()=>{ cancelAnimationFrame(fid); window.removeEventListener("resize",onResize); workspaceRef.current?.dispose(); workspaceRef.current=null; };
+
+    const onResize = () => { if (workspaceRef.current) Blockly.svgResize(workspaceRef.current); };
+    window.addEventListener("resize", onResize);
+    return () => {
+      cancelAnimationFrame(fid);
+      window.removeEventListener("resize", onResize);
+      workspaceRef.current?.dispose();
+      workspaceRef.current = null;
+    };
   }, []);
 
   const handleSave = async () => {
-    if (!workspaceRef.current) return;
+    if (!workspaceRef.current || !projectId) return;
     try {
-      const xml = Blockly.utils.xml.domToText(Blockly.Xml.workspaceToDom(workspaceRef.current));
+      const xml = Blockly.utils.xml.domToText(
+        Blockly.Xml.workspaceToDom(workspaceRef.current)
+      );
       setSaveStatus("saving");
-      if (projectId) {
-        await saveBlocks(projectId, xml);
-      } else {
-        localStorage.setItem(`blocks_${projectName}`, xml);   // fallback
-      }
-      setSaveStatus("saved"); setTimeout(()=>setSaveStatus(""),2500);
-    } catch(e) { setSaveStatus("error"); setTimeout(()=>setSaveStatus(""),2500); }
+      await saveBlocks(projectId, xml);
+      setSaveStatus("saved");
+    } catch (e) {
+      setSaveStatus("error");
+    } finally {
+      setTimeout(() => setSaveStatus(""), 2500);
+    }
   };
 
-  const handleRun = () => alert(`✅ تم إرسال ${workspaceRef.current?.getAllBlocks(false).length||0} كتلة إلى الروبوت!`);
+  const handleRun = () =>
+    alert(`✅ تم إرسال ${workspaceRef.current?.getAllBlocks(false).length || 0} كتلة إلى الروبوت!`);
 
-  const saveBtnLabel = saveStatus==="saving"?"جاري..." : saveStatus==="saved"?"✅ تم!" : saveStatus==="error"?"❌ خطأ" : "حفظ";
+  const saveBtnLabel =
+    saveStatus === "saving" ? "جاري..." :
+    saveStatus === "saved"  ? "✅ تم!"   :
+    saveStatus === "error"  ? "❌ خطأ"   : "حفظ";
 
   return (
     <>
@@ -162,6 +196,10 @@ export default function RobotApp() {
         .blocklyTreeLabel       { font-family:'Tajawal',sans-serif !important; font-size:13px !important; font-weight:700 !important; }
         .blocklyFlyoutBackground{ fill:#1c2128 !important; }
         .blocklyScrollbarHandle { fill:rgba(255,255,255,0.2) !important; }
+        .blocklyToolboxDiv      { width:110px !important; overflow:visible !important; }
+        .blocklyTreeRow         { width:100% !important; padding-right:8px !important; padding-left:4px !important; }
+        .blocklyTreeLabel       { white-space:nowrap !important; overflow:visible !important; font-size:12px !important; }
+        .blocklyTreeRowContentContainer { overflow:visible !important; }
 
         @keyframes float   { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
         @keyframes pulse   { 0%,100%{box-shadow:0 0 0 0 rgba(0,200,83,0.5)} 50%{box-shadow:0 0 0 8px rgba(0,200,83,0)} }
@@ -169,50 +207,26 @@ export default function RobotApp() {
         @keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
         @keyframes spin    { to{transform:rotate(360deg)} }
 
-        /* ─ Left panel ─ */
-        .left-panel { width:200px; flex-shrink:0; display:flex; flex-direction:column; background:rgba(22,27,34,0.75); border-right:1px solid rgba(255,255,255,0.06); }
+        .left-panel   { width:200px; flex-shrink:0; display:flex; flex-direction:column; background:rgba(22,27,34,0.75); border-right:1px solid rgba(255,255,255,0.06); }
         .panel-scroll { flex:1; overflow-y:auto; padding:10px; scrollbar-width:thin; scrollbar-color:rgba(108,99,255,0.4) rgba(255,255,255,0.04); }
         .panel-scroll::-webkit-scrollbar { width:4px; }
         .panel-scroll::-webkit-scrollbar-thumb { background:rgba(108,99,255,0.4); border-radius:2px; }
-
-        /* Robot icon container — fluid size */
         .robot-icon-wrap { width:clamp(36px,8vw,56px); height:clamp(36px,8vw,56px); margin:0 auto; animation:float 3s ease-in-out infinite; }
 
-        /* Landscape: narrow panel */
         @media (orientation:landscape) and (max-height:500px) {
           .left-panel  { width:150px !important; }
           .app-bar     { height:42px !important; }
           .toolbar-row { height:38px !important; }
         }
-        /* Mobile: hide left panel, show menu btn */
         @media (max-width:640px) {
           .left-panel      { display:none !important; }
           .mobile-menu-btn { display:flex !important; }
         }
         @media (min-width:641px) { .mobile-menu-btn { display:none !important; } }
 
-        /* Sheet */
         .sheet-scroll { overflow-y:auto; max-height:70vh; scrollbar-width:thin; scrollbar-color:rgba(108,99,255,0.4) transparent; }
         .sheet-scroll::-webkit-scrollbar { width:4px; }
         .sheet-scroll::-webkit-scrollbar-thumb { background:rgba(108,99,255,0.4); border-radius:2px; }
-        
-          .blocklyToolboxDiv {
-            width: 110px !important;
-            overflow: visible !important;
-          }
-          .blocklyTreeRow {
-            width: 100% !important;
-            padding-right: 8px !important;
-            padding-left: 4px !important;
-          }
-          .blocklyTreeLabel {
-            white-space: nowrap !important;
-            overflow: visible !important;
-            font-size: 12px !important;
-          }
-          .blocklyTreeRowContentContainer {
-            overflow: visible !important;
-          }
       `}</style>
 
       <div style={{ display:"flex", flexDirection:"column", height:"100vh", width:"100vw", background:"#0d1117", color:"#fff", fontFamily:"'Tajawal',sans-serif", overflow:"hidden" }}>
@@ -231,8 +245,10 @@ export default function RobotApp() {
         <div className="toolbar-row" style={{ height:44, flexShrink:0, background:"rgba(22,27,34,0.98)", borderBottom:"1px solid rgba(255,255,255,0.07)", display:"flex", alignItems:"center", padding:"0 10px", gap:7 }}>
           <button onClick={() => workspaceRef.current?.undo(false)} style={{ background:"rgba(255,255,255,0.07)", border:"none", color:"#fff", borderRadius:8, width:32, height:32, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", touchAction:"manipulation" }}><UndoIcon/></button>
           <button onClick={() => workspaceRef.current?.undo(true)}  style={{ background:"rgba(255,255,255,0.07)", border:"none", color:"#fff", borderRadius:8, width:32, height:32, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", touchAction:"manipulation" }}><RedoIcon/></button>
-          <button onClick={handleSave} disabled={saveStatus==="saving"} style={{ background:"rgba(108,99,255,0.14)", border:"1.5px solid rgba(108,99,255,0.38)", color:"#a78bfa", borderRadius:9, padding:"6px 12px", fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"'Tajawal',sans-serif", display:"flex", alignItems:"center", gap:5, touchAction:"manipulation", opacity:saveStatus==="saving"?0.7:1 }}>
-            {saveStatus==="saving" ? <div style={{ width:12, height:12, border:"2px solid #a78bfa", borderTopColor:"transparent", borderRadius:"50%", animation:"spin 0.7s linear infinite" }}/> : <SaveIcon/>}
+          <button onClick={handleSave} disabled={saveStatus==="saving" || !projectId} style={{ background:"rgba(108,99,255,0.14)", border:"1.5px solid rgba(108,99,255,0.38)", color:"#a78bfa", borderRadius:9, padding:"6px 12px", fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"'Tajawal',sans-serif", display:"flex", alignItems:"center", gap:5, touchAction:"manipulation", opacity:(saveStatus==="saving"||!projectId)?0.6:1 }}>
+            {saveStatus==="saving"
+              ? <div style={{ width:12, height:12, border:"2px solid #a78bfa", borderTopColor:"transparent", borderRadius:"50%", animation:"spin 0.7s linear infinite" }}/>
+              : <SaveIcon/>}
             <span>{saveBtnLabel}</span>
           </button>
           <div style={{ flex:1 }}/>
@@ -248,7 +264,6 @@ export default function RobotApp() {
           {/* LEFT PANEL */}
           <div className="left-panel">
             <div className="panel-scroll">
-              {/* Task card */}
               <div style={{ background:"rgba(108,99,255,0.11)", border:"1.5px solid rgba(108,99,255,0.28)", borderRadius:13, padding:11, marginBottom:10 }}>
                 <div style={{ fontSize:10, color:"#aaa", marginBottom:6, fontWeight:700, textTransform:"uppercase", letterSpacing:1 }}>المهمة</div>
                 <p style={{ fontSize:12, color:"#e0e0ff", lineHeight:1.7, marginBottom:8, fontWeight:600 }}>
@@ -260,9 +275,7 @@ export default function RobotApp() {
                 </div>
               </div>
 
-              {/* Connect card */}
               <div style={{ background:"rgba(22,27,34,0.9)", border:`1.5px solid ${connected?"rgba(0,200,83,0.38)":"rgba(255,255,255,0.09)"}`, borderRadius:13, padding:11, display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
-                {/* Responsive robot icon */}
                 <div className="robot-icon-wrap"><RobotIcon connected={connected}/></div>
                 <div style={{ fontSize:11, color:connected?"#00C853":"#aaa", fontWeight:700 }}>{connected?"✓ متصل":"غير متصل"}</div>
                 <button onClick={() => setConnected(v=>!v)}
@@ -271,24 +284,30 @@ export default function RobotApp() {
                 </button>
               </div>
 
-              {/* Cloud save info */}
-              {projectId && (
-                <div style={{ marginTop:10, fontSize:10, color:"rgba(255,255,255,0.25)", textAlign:"center", fontWeight:600 }}>
-                  ☁️ يُحفظ تلقائياً على الخادم
-                </div>
-              )}
+              <div style={{ marginTop:10, fontSize:10, color:"rgba(255,255,255,0.25)", textAlign:"center", fontWeight:600 }}>
+                ☁️ يُحفظ على الخادم
+              </div>
             </div>
           </div>
 
           {/* BLOCKLY */}
           <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0, minHeight:0, overflow:"hidden", position:"relative" }}>
-            {blockCount === 0 && (
+            {/* Loading overlay */}
+            {loadingData && (
+              <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(22,27,34,0.9)", zIndex:10 }}>
+                <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:12 }}>
+                  <div style={{ width:32, height:32, border:"3px solid rgba(108,99,255,0.3)", borderTopColor:"#6C63FF", borderRadius:"50%", animation:"spin 0.8s linear infinite" }}/>
+                  <span style={{ color:"#aaa", fontSize:13, fontWeight:700 }}>جاري تحميل المشروع...</span>
+                </div>
+              </div>
+            )}
+            {blockCount === 0 && !loadingData && (
               <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", pointerEvents:"none", zIndex:5, opacity:0.35 }}>
                 <p style={{ fontSize:"clamp(14px,4vw,18px)", fontWeight:800, color:"#fff", fontFamily:"'Tajawal',sans-serif" }}>أسقط الكتل هنا! 🧩</p>
               </div>
             )}
             <div ref={blocklyDivRef} style={{ position:"absolute", inset:0 }}/>
-            {(saveStatus==="saved"||saveStatus==="error") && (
+            {(saveStatus==="saved" || saveStatus==="error") && (
               <div style={{ position:"absolute", bottom:14, left:"50%", transform:"translateX(-50%)", background:saveStatus==="error"?"rgba(255,107,107,0.95)":"rgba(108,99,255,0.95)", border:`1px solid ${saveStatus==="error"?"#FF6B6B":"#a78bfa"}`, borderRadius:11, padding:"9px 18px", fontSize:13, fontWeight:800, color:"#fff", display:"flex", alignItems:"center", gap:7, boxShadow:"0 4px 20px rgba(0,0,0,0.4)", whiteSpace:"nowrap", zIndex:50, animation:"popIn 0.24s ease" }}>
                 {saveStatus==="saved" ? "✅ تم الحفظ على الخادم!" : "❌ فشل الحفظ، تحقق من الاتصال"}
               </div>
@@ -328,6 +347,11 @@ export default function RobotApp() {
                     {connected?"🔌 قطع":"🔗 ربط"}
                   </button>
                 </div>
+                {/* Save button in mobile sheet */}
+                <button onClick={() => { handleSave(); setShowPanel(false); }} disabled={saveStatus==="saving"||!projectId}
+                  style={{ background:"rgba(108,99,255,0.15)", border:"1.5px solid rgba(108,99,255,0.4)", color:"#a78bfa", borderRadius:13, padding:"12px 0", fontSize:14, fontWeight:800, cursor:"pointer", fontFamily:"'Tajawal',sans-serif", display:"flex", alignItems:"center", justifyContent:"center", gap:7, opacity:(saveStatus==="saving"||!projectId)?0.5:1, touchAction:"manipulation" }}>
+                  <SaveIcon/> حفظ المشروع
+                </button>
                 <button onClick={() => { handleRun(); setShowPanel(false); }} style={{ background:"linear-gradient(135deg,#00C853,#00897B)", border:"none", color:"#fff", borderRadius:13, padding:"13px 0", fontSize:15, fontWeight:800, cursor:"pointer", fontFamily:"'Fredoka One',cursive", display:"flex", alignItems:"center", justifyContent:"center", gap:8, boxShadow:"0 4px 18px rgba(0,200,83,0.38)", touchAction:"manipulation" }}>
                   <PlayIcon/> ابدأ التشغيل
                 </button>
