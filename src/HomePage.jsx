@@ -94,8 +94,9 @@ export default function HomePage() {
     navigate(`/${p.type}`, { state: { projectName: p.name, projectId: p._id } });
   };
 
+  // Only update activeIdx from scroll events, not from dot clicks
   const handleScroll = (e) => setActiveIdx(Math.round(e.target.scrollLeft / e.target.offsetWidth));
-  const scrollTo = (idx) => { carouselRef.current?.scrollTo({ left: idx * carouselRef.current.offsetWidth, behavior:"smooth" }); setActiveIdx(idx); };
+  const scrollTo = (idx) => { carouselRef.current?.scrollTo({ left: idx * carouselRef.current.offsetWidth, behavior:"smooth" }); };
 
   const activeMode = MODES[activeIdx] || MODES[0];
   const fmtDate = (d) => new Date(d).toLocaleDateString("ar-TN");
@@ -161,7 +162,7 @@ export default function HomePage() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/></svg>
             <span style={{ fontSize:8, fontWeight:800 }}>{projects.length}</span>
           </button>
-          <h1 style={{ fontFamily:"'Fredoka One',cursive", fontSize:"clamp(15px,4vw,21px)", background:"linear-gradient(90deg,#fff,rgba(255,255,255,0.65))", backgroundClip:"text", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>🤖</h1>
+          <h1 style={{ fontFamily:"'Fredoka One',cursive", fontSize:"clamp(15px,4vw,21px)", background:"linear-gradient(90deg,#fff,rgba(255,255,255,0.65))", backgroundClip:"text", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}></h1>
           <AccountMenu navigate={navigate}/>
         </div>
 
