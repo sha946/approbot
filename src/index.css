@@ -7,20 +7,30 @@
 html, body, #root {
   height: 100%;
   width: 100%;
+  /* Allow pages to manage their own scroll */
   overflow: hidden;
   background: #0d1117;
 }
 
-/* Force landscape on portrait phones */
-@media screen and (orientation: portrait) and (max-width: 768px) {
-  html {
-    transform: rotate(90deg);
-    transform-origin: left top;
-    width: 100vh;
-    height: 100vw;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    overflow-x: hidden;
-  }
+/* Global custom scrollbar style */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(108, 99, 255, 0.45);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(108, 99, 255, 0.7);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(108, 99, 255, 0.45) rgba(255, 255, 255, 0.04);
 }
