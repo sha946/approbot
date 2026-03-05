@@ -129,7 +129,11 @@ export default function HomePage() {
           .card-inner  { flex-direction:row; max-width:900px; gap:16px; }
           .mode-card   { flex-direction:row; align-items:center; gap:18px; padding:14px; }
           .illus-wrap  { flex:0 0 36%; max-height:150px; }
-          
+          .mode-info   { text-align:right; flex:1; }
+          .mode-emoji  { display:none; }
+          .welcome-bar { padding:5px 20px !important; }
+          .welcome-bar p { font-size:12px !important; }
+        }
 
         .start-btn { width:100%; padding:13px 0; border:none; color:#fff; border-radius:14px; font-size:clamp(14px,3.5vw,17px); font-weight:800; cursor:pointer; font-family:'Tajawal',sans-serif; touch-action:manipulation; transition:transform 0.15s; }
         .start-btn:active { transform:scale(0.97); }
@@ -184,31 +188,48 @@ export default function HomePage() {
         </div>
 
         {/* CAROUSEL */}
-        <div ref={carouselRef} className="carousel" onScroll={handleScroll} style={{ flex:1 }}>
-          {MODES.map(mode => (
-            <div key={mode.type} className="carousel-slide">
-              <div style={{ position:"absolute", top:"5%", left:"50%", transform:"translateX(-50%)", width:"55vw", height:"55vw", maxWidth:360, maxHeight:360, borderRadius:"50%", background:`radial-gradient(circle,${mode.glow} 0%,transparent 70%)`, pointerEvents:"none" }}/>
-              <div className="card-inner">
-                <div className="mode-card" style={{ border:`2px solid ${mode.border}`, boxShadow:`0 10px 40px ${mode.glow}` }}>
-                  <div className="illus-wrap" style={{ height:"clamp(100px,20vw,175px)" }}>{mode.illustration}</div>
-                  <div className="mode-info" style={{ textAlign:"center" }}>
-                    <div className="mode-emoji" style={{ fontSize:"clamp(22px,5vw,34px)", marginBottom:4 }}>{mode.emoji}</div>
-                    <h2 style={{ fontFamily:"'Tajawal',sans-serif", fontSize:"clamp(17px,4vw,24px)", fontWeight:900, color:"#fff", marginBottom:5 }}>{mode.title}</h2>
-                    <p style={{ fontSize:"clamp(12px,2.5vw,14px)", color:"rgba(255,255,255,0.55)", lineHeight:1.65, fontWeight:600 }}>{mode.desc}</p>
+        {/* CAROUSEL - replaced with single view showing both modes */}
+        <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:"14px 16px 10px", overflow:"hidden" }}>
+          <div style={{ 
+            display:"flex", 
+            flexDirection:"row", 
+            gap:14, 
+            width:"100%", 
+            maxWidth:900,
+            height:"100%",
+            maxHeight:340,
+          }}>
+            {MODES.map(mode => (
+              <div key={mode.type} style={{ flex:1, display:"flex", flexDirection:"column", gap:12 }}>
+                <div style={{ 
+                  flex:1,
+                  background:"rgba(0,0,0,0.32)", 
+                  borderRadius:24, 
+                  padding:"16px 14px", 
+                  backdropFilter:"blur(10px)",
+                  border:`2px solid ${mode.border}`, 
+                  boxShadow:`0 10px 40px ${mode.glow}`,
+                  display:"flex", 
+                  flexDirection:"column", 
+                  gap:10,
+                  overflow:"hidden"
+                }}>
+                  <div style={{ flex:1, borderRadius:14, overflow:"hidden", minHeight:0 }}>{mode.illustration}</div>
+                  <div style={{ textAlign:"center" }}>
+                    <div style={{ fontSize:"clamp(20px,4vw,30px)", marginBottom:3 }}>{mode.emoji}</div>
+                    <h2 style={{ fontFamily:"'Tajawal',sans-serif", fontSize:"clamp(15px,3vw,22px)", fontWeight:900, color:"#fff", marginBottom:4 }}>{mode.title}</h2>
+                    <p style={{ fontSize:"clamp(11px,2vw,13px)", color:"rgba(255,255,255,0.55)", lineHeight:1.6, fontWeight:600 }}>{mode.desc}</p>
                   </div>
                 </div>
-                <button className="start-btn" style={{ background:mode.btnBg, boxShadow:`0 5px 20px ${mode.glow}` }} onClick={() => openPrompt(mode.type)}>
+                <button className="start-btn" style={{ background:mode.btnBg, boxShadow:`0 5px 20px ${mode.glow}`, flexShrink:0 }} onClick={() => openPrompt(mode.type)}>
                   {mode.btnLabel} ←
                 </button>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
-        {/* DOTS */}
-        <div style={{ height:36, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", gap:8, background:"rgba(0,0,0,0.18)" }}>
-          {MODES.map((_,idx) => <button key={idx} className={`dot${activeIdx===idx?" active":""}`} style={{ background:activeIdx===idx?"#fff":"rgba(255,255,255,0.28)" }} onClick={() => scrollTo(idx)}/>)}
-        </div>
+        
       </div>
 
       {/* SIDEBAR */}
@@ -262,7 +283,7 @@ export default function HomePage() {
                 <h2 style={{ fontFamily:"'Tajawal',sans-serif", fontSize:18, fontWeight:900, color:"#fff", marginBottom:4 }}>مشروع جديد</h2>
                 <p style={{ color:"rgba(255,255,255,0.4)", fontSize:13, fontWeight:600 }}>{projectType==="program"?"مشروع برمجة":"مشروع رسم واتبع"}</p>
               </div>
-              <label style={{ fontSize:13, fontWeight:700, color:"rgba(255,255,255,0.5)", fontFamily:"'Tajawal',sans-serif", display:"flex", marginBottom:7 }}>اسم المشروع</label>
+              <label style={{ fontSize:13, fontWeight:700, color:"rgba(255,255,255,0.5)", fontFamily:"'Tajawal',sans-serif", display:"block", marginBottom:7 }}>اسم المشروع</label>
               <input type="text" value={projectName}
                 onChange={e => { setProjectName(e.target.value); setError(""); }}
                 onKeyDown={e => e.key==="Enter" && handleCreate()}
