@@ -1,4 +1,3 @@
-// Centralised API helper — imports this instead of hardcoding fetch() everywhere
 const BASE = "https://my-backend-production-64d0.up.railway.app";
 
 function getToken() {
@@ -13,7 +12,7 @@ function authHeaders() {
 export async function fetchProjects() {
   const res = await fetch(`${BASE}/api/projects`, { headers: authHeaders() });
   if (!res.ok) throw new Error("فشل تحميل المشاريع");
-  return res.json();           // array of project objects
+  return res.json();
 }
 
 export async function createProject(name, type) {
@@ -22,7 +21,7 @@ export async function createProject(name, type) {
     body: JSON.stringify({ name, type }),
   });
   if (!res.ok) throw new Error("فشل إنشاء المشروع");
-  return res.json();           // new project object
+  return res.json();
 }
 
 export async function deleteProject(id) {
@@ -36,9 +35,21 @@ export async function saveBlocks(id, blocksSave) {
   });
 }
 
+// Save draw — sends { drawSave: { strokes, speed } }
 export async function saveDraw(id, drawSave) {
-  await fetch(`${BASE}/api/projects/${id}/draw`, {
+  const res = await fetch(`${BASE}/api/projects/${id}/draw`, {
     method: "PUT", headers: authHeaders(),
     body: JSON.stringify({ drawSave }),
   });
+  if (!res.ok) throw new Error("فشل حفظ الرسم");
+  return res.json();
+}
+
+// Load draw — returns { drawSave: { strokes, speed } } or { drawSave: null }
+export async function loadDraw(id) {
+  const res = await fetch(`${BASE}/api/projects/${id}/draw`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("فشل تحميل الرسم");
+  return res.json();
 }

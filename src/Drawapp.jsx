@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { saveDraw, loadDraw } from "./api";
 
 const ArrowBackIcon = () => (<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>);
 const TrashIcon = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>);
@@ -74,22 +75,18 @@ async function sendChunked(characteristic, fullString) {
   }
 }
 
-function getSaveKey(projectName) {
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const username = user?.username || "guest";
-  const safeName = projectName.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, "_");
-  return `draw_save_${username}_${safeName}`;
-}
-
 export default function DrawApp() {
   const navigate    = useNavigate();
   const location    = useLocation();
   const projectName = location.state?.projectName || "مشروعي ✏️";
+  const projectId   = location.state?.projectId;
 
   const canvasRef     = useRef(null);
   const ctxRef        = useRef(null);
   const isDrawing     = useRef(false);
   const currentStroke = useRef([]);
+  // ── KEY FIX: keep a ref in sync with strokes state so resize can access latest value ──
+  const strokesRef    = useRef([]);
 
   const [strokes,     setStrokes]    = useState([]);
   const [tool,        setTool]       = useState("pen");
@@ -101,37 +98,24 @@ export default function DrawApp() {
   const [btStatus,    setBtStatus]   = useState("disconnected");
   const [sendStatus,  setSendStatus] = useState("");
   const [saveStatus,  setSaveStatus] = useState("");
-  const [showPanel,   setShowPanel]  = useState(false); // mobile panel toggle
+  const [showPanel,   setShowPanel]  = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const resize = () => {
-      const { width, height } = canvas.parentElement.getBoundingClientRect();
-      const tempCanvas = document.createElement("canvas");
-      tempCanvas.width = canvas.width; tempCanvas.height = canvas.height;
-      tempCanvas.getContext("2d").drawImage(canvas, 0, 0);
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      ctx.lineCap = "round"; ctx.lineJoin = "round";
-      ctx.drawImage(tempCanvas, 0, 0);
-      ctxRef.current = ctx;
-    };
-    resize();
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
-  }, []);
-
+  // ── Redraw helper ────────────────────────────────────────────────
   const redrawAll = useCallback((strokeList) => {
     const canvas = canvasRef.current, ctx = ctxRef.current;
     if (!canvas || !ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // dot grid
     ctx.fillStyle = "rgba(255,255,255,0.06)";
     for (let x = 20; x < canvas.width; x += 30)
       for (let y = 20; y < canvas.height; y += 30) { ctx.beginPath(); ctx.arc(x,y,1.5,0,Math.PI*2); ctx.fill(); }
+    // strokes
     for (const stroke of strokeList) {
       if (stroke.points.length < 2) continue;
-      ctx.beginPath(); ctx.strokeStyle = stroke.color; ctx.lineWidth = stroke.size;
+      ctx.beginPath();
+      ctx.strokeStyle = stroke.color;
+      ctx.lineWidth   = stroke.size;
       ctx.lineCap = "round"; ctx.lineJoin = "round";
       ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
       for (let i = 1; i < stroke.points.length; i++) ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
@@ -139,19 +123,46 @@ export default function DrawApp() {
     }
   }, []);
 
-  useEffect(() => { redrawAll(strokes); }, [strokes, redrawAll]);
-
+  // ── Keep strokesRef in sync + redraw whenever strokes change ────
   useEffect(() => {
-    const key = getSaveKey(projectName);
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
-        if (data.strokes?.length > 0) { setStrokes(data.strokes); if (data.speed) setSpeed(data.speed); }
-      } catch (e) {}
-    }
-  }, [projectName]);
+    strokesRef.current = strokes;
+    redrawAll(strokes);
+  }, [strokes, redrawAll]);
 
+  // ── Canvas resize — uses strokesRef so it never sees stale state ─
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const resize = () => {
+      const { width, height } = canvas.parentElement.getBoundingClientRect();
+      canvas.width  = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctxRef.current = ctx;
+      redrawAll(strokesRef.current); // ← always has latest strokes
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, [redrawAll]); // redrawAll is stable (useCallback with no deps)
+
+  // ── Load from backend on mount ───────────────────────────────────
+  useEffect(() => {
+    if (!projectId) { setLoadingData(false); return; }
+    loadDraw(projectId)
+      .then(data => {
+        const saved = data?.drawSave;
+        if (saved?.strokes?.length > 0) {
+          setStrokes(saved.strokes);
+          if (saved.speed) setSpeed(saved.speed);
+        }
+      })
+      .catch(() => {}) // silently ignore if no saved data yet
+      .finally(() => setLoadingData(false));
+  }, [projectId]);
+
+  // ── Pointer helpers ──────────────────────────────────────────────
   const getPos = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
     const src  = e.touches ? e.touches[0] : e;
@@ -178,24 +189,50 @@ export default function DrawApp() {
     e.preventDefault();
     if (!isDrawing.current) return;
     isDrawing.current = false;
-    if (currentStroke.current.length > 1 && tool === "pen") {
-      setStrokes(prev => [...prev, { points: [...currentStroke.current], color: penColor, size: penSize }]);
-    }
+
+    const pts = [...currentStroke.current];
     currentStroke.current = [];
+
+    if (pts.length > 1 && tool === "pen") {
+      const newStroke = { points: pts, color: penColor, size: penSize };
+      // update ref immediately so redrawAll sees it right away
+      const updated = [...strokesRef.current, newStroke];
+      strokesRef.current = updated;
+      setStrokes(updated);
+      redrawAll(updated); // ← force redraw instantly, don't wait for useEffect
+    } else if (pts.length > 1 && tool === "eraser") {
+      const newStroke = { points: pts, color: "#161b22", size: 30, isEraser: true };
+      const updated = [...strokesRef.current, newStroke];
+      strokesRef.current = updated;
+      setStrokes(updated);
+      redrawAll(updated); // ← force redraw instantly
+    }
+  };
+  // ── Actions ──────────────────────────────────────────────────────
+  const handleUndo  = () => setStrokes(prev => prev.slice(0, -1));
+  const handleClear = () => setStrokes([]);
+
+  const handleSave = async () => {
+    if (!projectId) return;
+    try {
+      await saveDraw(projectId, { strokes, speed });
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("error");
+    } finally {
+      setTimeout(() => setSaveStatus(""), 2500);
+    }
   };
 
-  const handleUndo  = () => setStrokes(prev => prev.slice(0, -1));
-  const handleClear = () => { setStrokes([]); const ctx = ctxRef.current, canvas = canvasRef.current; if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height); };
-  const handleSave  = () => { localStorage.setItem(getSaveKey(projectName), JSON.stringify({ strokes, speed })); setSaveStatus("saved"); setTimeout(() => setSaveStatus(""), 2500); };
-
+  // ── Bluetooth ────────────────────────────────────────────────────
   const handleConnect = async () => {
     try {
       setBtStatus("connecting");
       const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [BLE_SERVICE] }], optionalServices: [BLE_SERVICE] });
       device.addEventListener("gattserverdisconnected", () => { setBtStatus("disconnected"); setBtChar(null); setBtDevice(null); });
-      const server = await device.gatt.connect();
+      const server  = await device.gatt.connect();
       const service = await server.getPrimaryService(BLE_SERVICE);
-      const char = await service.getCharacteristic(BLE_CHAR);
+      const char    = await service.getCharacteristic(BLE_CHAR);
       setBtDevice(device); setBtChar(char); setBtStatus("connected");
     } catch { setBtStatus("disconnected"); }
   };
@@ -203,7 +240,7 @@ export default function DrawApp() {
 
   const handleSend = async () => {
     if (!btChar) { alert("وصّل الروبوت أولاً عبر البلوتوث!"); return; }
-    const penStrokes = strokes.map(s => s.points);
+    const penStrokes = strokes.filter(s => !s.isEraser).map(s => s.points);
     if (penStrokes.length === 0) { alert("ارسم مساراً أولاً!"); return; }
     const cmds = pathToCommands(penStrokes, speed);
     try {
@@ -214,8 +251,8 @@ export default function DrawApp() {
     } catch { setSendStatus("error"); setTimeout(() => setSendStatus(""), 3000); }
   };
 
-  const btColor = btStatus === "connected" ? "#00C853" : btStatus === "connecting" ? "#f4b400" : "#aaa";
-  const COLORS = ["#00E5FF","#FFEB3B","#FF6B6B","#00C853","#FF9800","#CE93D8","#ffffff"];
+  const btColor  = btStatus === "connected" ? "#00C853" : btStatus === "connecting" ? "#f4b400" : "#aaa";
+  const COLORS   = ["#00E5FF","#FFEB3B","#FF6B6B","#00C853","#FF9800","#CE93D8","#ffffff"];
 
   return (
     <>
@@ -233,18 +270,16 @@ export default function DrawApp() {
         .send-btn { background:linear-gradient(135deg,#00C853,#00897B); border:none; color:#fff; border-radius:14px; font-size:15px; font-weight:800; cursor:pointer; font-family:'Fredoka One',cursive; letter-spacing:1px; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 4px 20px rgba(0,200,83,0.35); transition:all 0.2s; touch-action:manipulation; }
         .send-btn:disabled { opacity:0.45; cursor:not-allowed; }
         canvas { touch-action:none; cursor:crosshair; display:block; }
-        @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+        @keyframes float     { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
         @keyframes pulse-green { 0%,100%{box-shadow:0 0 0 0 rgba(0,200,83,0.5)} 50%{box-shadow:0 0 0 8px rgba(0,200,83,0)} }
-        @keyframes spin { to{transform:rotate(360deg)} }
-        @keyframes popIn { 0%{opacity:0;transform:scale(0.8)} 100%{opacity:1;transform:scale(1)} }
-        @keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+        @keyframes spin      { to{transform:rotate(360deg)} }
+        @keyframes popIn     { 0%{opacity:0;transform:scale(0.8)} 100%{opacity:1;transform:scale(1)} }
+        @keyframes slideUp   { from{transform:translateY(100%)} to{transform:translateY(0)} }
 
-        /* Desktop layout */
         .left-toolbar { display:flex; }
         .right-panel  { display:flex; }
         .bottom-bar   { display:none; }
 
-        /* Mobile layout */
         @media (max-width: 700px) {
           .left-toolbar { display:none !important; }
           .right-panel  { display:none !important; }
@@ -273,7 +308,7 @@ export default function DrawApp() {
         {/* BODY */}
         <div style={{ display:"flex", flex:1, minHeight:0, overflow:"hidden" }}>
 
-          {/* LEFT TOOLBAR — desktop only */}
+          {/* LEFT TOOLBAR */}
           <div className="left-toolbar" style={{ width:68, flexShrink:0, flexDirection:"column", alignItems:"center", padding:"12px 0", gap:10, borderRight:"1px solid rgba(255,255,255,0.06)", background:"rgba(22,27,34,0.85)", zIndex:10, overflowY:"auto" }}>
             <button className={`tool-btn ${tool==="pen"?"active":""}`} onClick={() => setTool("pen")}><PenIcon /></button>
             <button className={`tool-btn ${tool==="eraser"?"active":""}`} onClick={() => setTool("eraser")}><EraserIcon /></button>
@@ -294,7 +329,16 @@ export default function DrawApp() {
 
           {/* CANVAS */}
           <div style={{ flex:1, position:"relative", minWidth:0, minHeight:0, background:"#161b22", overflow:"hidden" }}>
-            {strokes.length === 0 && (
+            {/* Loading overlay */}
+            {loadingData && (
+              <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(22,27,34,0.85)", zIndex:10 }}>
+                <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:12 }}>
+                  <div style={{ width:32, height:32, border:"3px solid rgba(0,200,83,0.3)", borderTopColor:"#00C853", borderRadius:"50%", animation:"spin 0.8s linear infinite" }}/>
+                  <span style={{ color:"#aaa", fontSize:13, fontWeight:700 }}>جاري تحميل المشروع...</span>
+                </div>
+              </div>
+            )}
+            {strokes.length === 0 && !loadingData && (
               <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", pointerEvents:"none", gap:12, opacity:0.35 }}>
                 <div style={{ animation:"float 3s ease-in-out infinite" }}><RobotFaceIcon /></div>
                 <p style={{ fontSize:"clamp(14px,4vw,18px)", fontWeight:700, color:"#fff", textAlign:"center" }}>ارسم مسار الروبوت هنا!</p>
@@ -310,9 +354,14 @@ export default function DrawApp() {
                 ✅ تم حفظ المشروع!
               </div>
             )}
+            {saveStatus === "error" && (
+              <div style={{ position:"absolute", bottom:20, left:"50%", transform:"translateX(-50%)", background:"rgba(255,107,107,0.95)", border:"1px solid #FF6B6B", borderRadius:12, padding:"10px 22px", fontSize:14, fontWeight:800, color:"#fff", animation:"popIn 0.25s ease", display:"flex", alignItems:"center", gap:8, whiteSpace:"nowrap", zIndex:10 }}>
+                ❌ فشل الحفظ، تحقق من الاتصال
+              </div>
+            )}
           </div>
 
-          {/* RIGHT PANEL — desktop only */}
+          {/* RIGHT PANEL */}
           <div className="right-panel" style={{ width:190, flexShrink:0, flexDirection:"column", padding:12, gap:12, borderLeft:"1px solid rgba(255,255,255,0.06)", background:"rgba(22,27,34,0.85)", zIndex:10, overflowY:"auto" }}>
             <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, background:"rgba(0,200,83,0.07)", border:"1.5px solid rgba(0,200,83,0.2)", borderRadius:14, padding:12 }}>
               <div style={{ animation:"float 3s ease-in-out infinite" }}><RobotFaceIcon /></div>
@@ -328,11 +377,11 @@ export default function DrawApp() {
             <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:12, display:"flex", flexDirection:"column", gap:8 }}>
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:13 }}>
                 <span style={{ color:"#aaa", fontWeight:600 }}>الخطوط</span>
-                <span style={{ color:"#00E5FF", fontWeight:800 }}>{strokes.length}</span>
+                <span style={{ color:"#00E5FF", fontWeight:800 }}>{strokes.filter(s => !s.isEraser).length}</span>
               </div>
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:13 }}>
                 <span style={{ color:"#aaa", fontWeight:600 }}>الأوامر</span>
-                <span style={{ color:"#f4b400", fontWeight:800 }}>{pathToCommands(strokes.map(s => s.points), speed).length}</span>
+                <span style={{ color:"#f4b400", fontWeight:800 }}>{pathToCommands(strokes.filter(s => !s.isEraser).map(s => s.points), speed).length}</span>
               </div>
             </div>
             <div style={{ flex:1 }}/>
@@ -346,7 +395,7 @@ export default function DrawApp() {
             ) : (
               <button onClick={handleDisconnect} style={{ background:"rgba(255,107,107,0.15)", border:"1px solid rgba(255,107,107,0.4)", color:"#FF6B6B", borderRadius:12, padding:"10px 0", fontSize:13, fontWeight:800, cursor:"pointer", fontFamily:"'Tajawal',sans-serif", touchAction:"manipulation" }}>🔌 قطع الاتصال</button>
             )}
-            <button className="send-btn" onClick={handleSend} disabled={sendStatus==="sending"||strokes.length===0} style={{ padding:"12px 0", width:"100%" }}>
+            <button className="send-btn" onClick={handleSend} disabled={sendStatus==="sending"||strokes.filter(s=>!s.isEraser).length===0} style={{ padding:"12px 0", width:"100%" }}>
               {sendStatus==="sending" ? <><span style={{ width:16, height:16, border:"2px solid #fff", borderTopColor:"transparent", borderRadius:"50%", animation:"spin 0.7s linear infinite", display:"inline-block" }}/> إرسال...</> : sendStatus==="done" ? "✅ تم!" : sendStatus==="error" ? "❌ خطأ" : <><PlayIcon /> أرسل للروبوت</>}
             </button>
           </div>
@@ -358,14 +407,13 @@ export default function DrawApp() {
           <button className={`tool-btn ${tool==="eraser"?"active":""}`} style={{ width:40, height:40 }} onClick={() => setTool("eraser")}><EraserIcon /></button>
           <button className="tool-btn" style={{ width:40, height:40 }} onClick={handleUndo}><UndoIcon /></button>
           <button className="tool-btn" style={{ width:40, height:40 }} onClick={handleClear}><TrashIcon /></button>
-          {/* Color row */}
           <div style={{ display:"flex", gap:6, alignItems:"center" }}>
             {COLORS.map(c => (
               <div key={c} className={`color-dot ${penColor===c?"selected":""}`} style={{ background:c, width:22, height:22 }} onClick={() => { setPenColor(c); setTool("pen"); }} />
             ))}
           </div>
           <button onClick={() => setShowPanel(true)} className="tool-btn" style={{ width:40, height:40 }}><SettingsIcon /></button>
-          <button className="send-btn" onClick={handleSend} disabled={sendStatus==="sending"||strokes.length===0} style={{ padding:"8px 14px", borderRadius:12, fontSize:13 }}>
+          <button className="send-btn" onClick={handleSend} disabled={sendStatus==="sending"||strokes.filter(s=>!s.isEraser).length===0} style={{ padding:"8px 14px", borderRadius:12, fontSize:13 }}>
             <PlayIcon />
           </button>
         </div>
@@ -399,7 +447,7 @@ export default function DrawApp() {
                   <button onClick={handleDisconnect} style={{ flex:1, background:"rgba(255,107,107,0.15)", border:"1px solid rgba(255,107,107,0.4)", color:"#FF6B6B", borderRadius:12, padding:"11px 0", fontSize:14, fontWeight:800, cursor:"pointer", fontFamily:"'Tajawal',sans-serif" }}>🔌 قطع</button>
                 )}
               </div>
-              <button className="send-btn" onClick={() => { handleSend(); setShowPanel(false); }} disabled={sendStatus==="sending"||strokes.length===0} style={{ padding:"13px 0", width:"100%", borderRadius:14, fontSize:15 }}>
+              <button className="send-btn" onClick={() => { handleSend(); setShowPanel(false); }} disabled={sendStatus==="sending"||strokes.filter(s=>!s.isEraser).length===0} style={{ padding:"13px 0", width:"100%", borderRadius:14, fontSize:15 }}>
                 <PlayIcon /> أرسل للروبوت
               </button>
             </div>
