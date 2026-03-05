@@ -126,8 +126,8 @@ export default function HomePage() {
 
         @media (orientation:landscape) and (max-height:500px) {
           .carousel-slide { padding:8px 16px 6px; }
-          .card-inner  { flex-direction:row; max-width:900px; gap:16px;align-items: stretch; }
-          .mode-card   { flex-direction:row; align-items:center; gap:18px; padding:14px;flex: 1; }
+          .card-inner  { flex-direction:row; max-width:900px; gap:16px; }
+          .mode-card   { flex-direction:row; align-items:center; gap:18px; padding:14px; }
           .illus-wrap  { flex:0 0 36%; max-height:150px; }
           
 
