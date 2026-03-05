@@ -188,47 +188,49 @@ export default function HomePage() {
         </div>
 
         {/* CAROUSEL */}
-        {/* CAROUSEL - replaced with single view showing both modes */}
-        <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:"14px 16px 10px", overflow:"hidden" }}>
-          <div style={{ 
-            display:"flex", 
-            flexDirection:"row", 
-            gap:14, 
-            width:"100%", 
-            maxWidth:900,
-            height:"100%",
-            maxHeight:340,
-          }}>
-            {MODES.map(mode => (
-              <div key={mode.type} style={{ flex:1, display:"flex", flexDirection:"column", gap:12 }}>
-                <div style={{ 
-                  flex:1,
-                  background:"rgba(0,0,0,0.32)", 
-                  borderRadius:24, 
-                  padding:"16px 14px", 
-                  backdropFilter:"blur(10px)",
-                  border:`2px solid ${mode.border}`, 
-                  boxShadow:`0 10px 40px ${mode.glow}`,
-                  display:"flex", 
-                  flexDirection:"column", 
-                  gap:10,
-                  overflow:"hidden"
-                }}>
-                  <div style={{ flex:1, borderRadius:14, overflow:"hidden", minHeight:0 }}>{mode.illustration}</div>
-                  <div style={{ textAlign:"center" }}>
-                    <div style={{ fontSize:"clamp(20px,4vw,30px)", marginBottom:3 }}>{mode.emoji}</div>
-                    <h2 style={{ fontFamily:"'Tajawal',sans-serif", fontSize:"clamp(15px,3vw,22px)", fontWeight:900, color:"#fff", marginBottom:4 }}>{mode.title}</h2>
-                    <p style={{ fontSize:"clamp(11px,2vw,13px)", color:"rgba(255,255,255,0.55)", lineHeight:1.6, fontWeight:600 }}>{mode.desc}</p>
+       {/* CAROUSEL */}
+        <div ref={carouselRef} className="carousel" onScroll={handleScroll} style={{ flex:1 }}>
+          <div className="carousel-slide">
+            <div style={{
+              display:"flex",
+              flexDirection:"row",
+              gap:14,
+              width:"100%",
+              maxWidth:900,
+              height:"100%",
+              maxHeight:340,
+              padding:"0 4px",
+            }}>
+              {MODES.map(mode => (
+                <div key={mode.type} style={{ flex:1, display:"flex", flexDirection:"column", gap:12 }}>
+                  <div style={{
+                    flex:1,
+                    background:"rgba(0,0,0,0.32)",
+                    borderRadius:24,
+                    padding:"16px 14px",
+                    backdropFilter:"blur(10px)",
+                    border:`2px solid ${mode.border}`,
+                    boxShadow:`0 10px 40px ${mode.glow}`,
+                    display:"flex",
+                    flexDirection:"column",
+                    gap:10,
+                    overflow:"hidden",
+                  }}>
+                    <div style={{ flex:1, borderRadius:14, overflow:"hidden", minHeight:0 }}>{mode.illustration}</div>
+                    <div style={{ textAlign:"center" }}>
+                      <div style={{ fontSize:"clamp(20px,4vw,30px)", marginBottom:3 }}>{mode.emoji}</div>
+                      <h2 style={{ fontFamily:"'Tajawal',sans-serif", fontSize:"clamp(15px,3vw,22px)", fontWeight:900, color:"#fff", marginBottom:4 }}>{mode.title}</h2>
+                      <p style={{ fontSize:"clamp(11px,2vw,13px)", color:"rgba(255,255,255,0.55)", lineHeight:1.6, fontWeight:600 }}>{mode.desc}</p>
+                    </div>
                   </div>
+                  <button className="start-btn" style={{ background:mode.btnBg, boxShadow:`0 5px 20px ${mode.glow}`, flexShrink:0 }} onClick={() => openPrompt(mode.type)}>
+                    {mode.btnLabel} ←
+                  </button>
                 </div>
-                <button className="start-btn" style={{ background:mode.btnBg, boxShadow:`0 5px 20px ${mode.glow}`, flexShrink:0 }} onClick={() => openPrompt(mode.type)}>
-                  {mode.btnLabel} ←
-                </button>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-
+</div>
         
       </div>
 
