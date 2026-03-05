@@ -59,7 +59,6 @@ export default function HomePage() {
   const [activeIdx,   setActiveIdx]   = useState(0);
   const carouselRef = useRef(null);
 
-  // ── Load projects from backend on mount ──────────────────────
   useEffect(() => {
     fetchProjects()
       .then(data => setProjects(data))
@@ -86,7 +85,7 @@ export default function HomePage() {
 
   const handleDelete = async (id, e) => {
     e.stopPropagation();
-    setProjects(prev => prev.filter(p => p._id !== id));   // optimistic
+    setProjects(prev => prev.filter(p => p._id !== id));
     try { await deleteProject(id); } catch {}
   };
 
@@ -112,6 +111,7 @@ export default function HomePage() {
         @keyframes slideIn  { from{opacity:0;transform:translateX(-100%)} to{opacity:1;transform:translateX(0)} }
         @keyframes popIn    { from{opacity:0;transform:translate(-50%,-50%) scale(0.9)} to{opacity:1;transform:translate(-50%,-50%) scale(1)} }
         @keyframes spin     { to{transform:rotate(360deg)} }
+        @keyframes welcomeFade { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
 
         .carousel { display:flex; height:100%; overflow-x:scroll; overflow-y:hidden; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,0.3) rgba(255,255,255,0.05); }
         .carousel::-webkit-scrollbar { height:5px; }
@@ -130,6 +130,8 @@ export default function HomePage() {
           .illus-wrap  { flex:0 0 36%; max-height:150px; }
           .mode-info   { text-align:right; flex:1; }
           .mode-emoji  { display:none; }
+          .welcome-bar { padding:5px 20px !important; }
+          .welcome-bar p { font-size:12px !important; }
         }
 
         .start-btn { width:100%; padding:13px 0; border:none; color:#fff; border-radius:14px; font-size:clamp(14px,3.5vw,17px); font-weight:800; cursor:pointer; font-family:'Tajawal',sans-serif; touch-action:manipulation; transition:transform 0.15s; }
@@ -153,14 +155,35 @@ export default function HomePage() {
       <div style={{ position:"relative", zIndex:1, height:"100vh", width:"100vw", display:"flex", flexDirection:"column", fontFamily:"'Tajawal',sans-serif", color:"#fff", direction:"rtl", overflow:"hidden" }}>
 
         {/* TOP BAR */}
-        <div style={{ height:50, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 14px", background:"rgba(0,0,0,0.28)", backdropFilter:"blur(12px)", borderBottom:"1px solid rgba(255,255,255,0.06)", zIndex:20 }}>
+        <div style={{ height:50, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 14px", background:"rgba(0,0,0,0.28)", backdropFilter:"blur(12px)", borderBottom:"1px solid rgba(255,255,255,0.06)", zIndex:20, overflow:"visible" }}>
           <button onClick={() => setShowSidebar(true)}
             style={{ width:38, height:38, borderRadius:11, background:"rgba(255,255,255,0.1)", border:"1.5px solid rgba(255,255,255,0.14)", color:"#fff", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:2, touchAction:"manipulation" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/></svg>
             <span style={{ fontSize:8, fontWeight:800 }}>{projects.length}</span>
           </button>
-          <h1 style={{ fontFamily:"'Fredoka One',cursive", fontSize:"clamp(15px,4vw,21px)", background:"linear-gradient(90deg,#fff,rgba(255,255,255,0.65))", backgroundClip:"text", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>🤖 روبوت كيدز</h1>
+          <h1 style={{ fontFamily:"'Fredoka One',cursive", fontSize:"clamp(15px,4vw,21px)", background:"linear-gradient(90deg,#fff,rgba(255,255,255,0.65))", backgroundClip:"text", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>🤖</h1>
           <AccountMenu navigate={navigate}/>
+        </div>
+
+        {/* WELCOME BAR */}
+        <div className="welcome-bar" style={{
+          flexShrink:0,
+          textAlign:"center",
+          padding:"8px 20px",
+          background:"rgba(0,0,0,0.18)",
+          borderBottom:"1px solid rgba(255,255,255,0.05)",
+          animation:"welcomeFade 0.5s ease both",
+        }}>
+          <p style={{
+            fontFamily:"'Tajawal',sans-serif",
+            fontSize:"clamp(12px,3vw,15px)",
+            fontWeight:700,
+            color:"rgba(255,255,255,0.65)",
+            margin:0,
+            letterSpacing:0.3,
+          }}>
+             أهلاً بك! اختر نشاطك المفضل!
+          </p>
         </div>
 
         {/* CAROUSEL */}

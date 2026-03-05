@@ -47,12 +47,30 @@ export function AccountMenu({ navigate }) {
   const { getProfile } = useProfile();
   const [open, setOpen]       = useState(false);
   const [profile, setProfile] = useState(getProfile());
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const menuRef               = useRef(null);
-
-  useEffect(() => { if (open) setProfile(getProfile()); }, [open]);
+  const btnRef                = useRef(null);
 
   useEffect(() => {
-    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false); };
+    if (open) {
+      setProfile(getProfile());
+      if (btnRef.current) {
+        const rect = btnRef.current.getBoundingClientRect();
+        // Make sure menu doesn't go off screen on the right
+        const menuWidth = 220;
+        const left = Math.min(rect.left, window.innerWidth - menuWidth - 8);
+        setMenuPos({ top: rect.bottom + 8, left });
+      }
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target) &&
+        btnRef.current  && !btnRef.current.contains(e.target)
+      ) setOpen(false);
+    };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
@@ -70,8 +88,9 @@ export function AccountMenu({ navigate }) {
   };
 
   return (
-    <div ref={menuRef} style={{ position: "relative" }}>
+    <div style={{ position: "relative", zIndex: 9999 }}>
       <button
+        ref={btnRef}
         onClick={() => setOpen(v => !v)}
         style={{
           background: open ? "rgba(108,99,255,0.3)" : "rgba(108,99,255,0.15)",
@@ -88,15 +107,22 @@ export function AccountMenu({ navigate }) {
       </button>
 
       {open && (
-        <div style={{
-          position: "absolute", top: 48, right: 0,
-          width: 220, background: "#161b22",
-          border: "1.5px solid rgba(255,255,255,0.1)",
-          borderRadius: 16, overflow: "hidden",
-          boxShadow: "0 16px 48px rgba(0,0,0,0.6)",
-          zIndex: 999,
-          animation: "menuPop 0.18s cubic-bezier(.34,1.56,.64,1) both",
-        }}>
+        <div
+          ref={menuRef}
+          style={{
+            position: "fixed",
+            top: menuPos.top,
+            left: menuPos.left,
+            width: 220,
+            background: "#161b22",
+            border: "1.5px solid rgba(255,255,255,0.1)",
+            borderRadius: 16,
+            overflow: "hidden",
+            boxShadow: "0 16px 48px rgba(0,0,0,0.6)",
+            zIndex: 9999,
+            animation: "menuPop 0.18s cubic-bezier(.34,1.56,.64,1) both",
+          }}
+        >
           <style>{`@keyframes menuPop{from{opacity:0;transform:scale(0.9) translateY(-8px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
 
           <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", gap: 10 }}>

@@ -78,7 +78,7 @@ export function CreateAccountPage() {
         <div className="auth-form-col">
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <Input label="الاسم الكامل"          value={form.name}     onChange={set("name")}     placeholder="مثال: محمد أحمد"        icon="👤"/>
-            <Input label="اسم المستخدم"           value={form.username} onChange={set("username")} placeholder="مثال: robot_kid"        icon="🎮"/>
+            <Input label="اسم المستخدم"           value={form.username} onChange={set("username")} placeholder="مثال: robot_kid"        icon=""/>
             <Input label="كلمة المرور"    type="password" value={form.password} onChange={set("password")} placeholder="6 أحرف على الأقل"     icon="🔒"/>
             <Input label="تأكيد كلمة المرور" type="password" value={form.confirm}  onChange={set("confirm")}  placeholder="أعد كتابة كلمة المرور" icon="🔑"/>
             {error && <div className="error-box">⚠️ {error}</div>}
@@ -120,7 +120,7 @@ export function LoginPage() {
       <div className="auth-layout">
         <div className="auth-logo-col">
           <RobotLogo />
-          <h1 className="auth-title">مرحباً بعودتك! 👋</h1>
+          <h1 className="auth-title">مرحباً بعودتك! </h1>
           <p className="auth-sub">سجّل دخولك وتابع مغامرتك</p>
         </div>
         <div className="auth-form-col">
@@ -128,7 +128,7 @@ export function LoginPage() {
             <Input label="اسم المستخدم" value={form.username} onChange={set("username")} placeholder="أدخل اسم المستخدم" icon="🎮"/>
             <Input label="كلمة المرور" type="password" value={form.password} onChange={set("password")} placeholder="أدخل كلمة المرور" icon="🔒"/>
             {error && <div className="error-box">⚠️ {error}</div>}
-            <button onClick={handleSubmit} className="submit-btn">تسجيل الدخول ✨</button>
+            <button onClick={handleSubmit} className="submit-btn">تسجيل الدخول </button>
           </div>
           <div style={{ textAlign: "center", marginTop: 14 }}>
             <span className="link-text">ليس لديك حساب؟ </span>
