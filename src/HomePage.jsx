@@ -129,13 +129,7 @@ export default function HomePage() {
           .card-inner  { flex-direction:row; max-width:900px; gap:16px;align-items: stretch; }
           .mode-card   { flex-direction:row; align-items:center; gap:18px; padding:14px;flex: 1; }
           .illus-wrap  { flex:0 0 36%; max-height:150px; }
-          .start-btn { 
-  
-          .mode-info   { text-align:right; flex:1; }
-          .mode-emoji  { display:flex; }
-          .welcome-bar { padding:5px 20px !important; }
-          .welcome-bar p { font-size:12px !important; }
-        }
+          
 
         .start-btn { width:100%; padding:13px 0; border:none; color:#fff; border-radius:14px; font-size:clamp(14px,3.5vw,17px); font-weight:800; cursor:pointer; font-family:'Tajawal',sans-serif; touch-action:manipulation; transition:transform 0.15s; }
         .start-btn:active { transform:scale(0.97); }
