@@ -126,11 +126,13 @@ export default function HomePage() {
 
         @media (orientation:landscape) and (max-height:500px) {
           .carousel-slide { padding:8px 16px 6px; }
-          .card-inner  { flex-direction:row; max-width:900px; gap:16px; }
-          .mode-card   { flex-direction:row; align-items:center; gap:18px; padding:14px; }
+          .card-inner  { flex-direction:row; max-width:900px; gap:16px;align-items: stretch; }
+          .mode-card   { flex-direction:row; align-items:center; gap:18px; padding:14px;flex: 1; }
           .illus-wrap  { flex:0 0 36%; max-height:150px; }
+          .start-btn { 
+  
           .mode-info   { text-align:right; flex:1; }
-          .mode-emoji  { display:none; }
+          .mode-emoji  { display:flex; }
           .welcome-bar { padding:5px 20px !important; }
           .welcome-bar p { font-size:12px !important; }
         }
@@ -266,7 +268,7 @@ export default function HomePage() {
                 <h2 style={{ fontFamily:"'Tajawal',sans-serif", fontSize:18, fontWeight:900, color:"#fff", marginBottom:4 }}>مشروع جديد</h2>
                 <p style={{ color:"rgba(255,255,255,0.4)", fontSize:13, fontWeight:600 }}>{projectType==="program"?"مشروع برمجة":"مشروع رسم واتبع"}</p>
               </div>
-              <label style={{ fontSize:13, fontWeight:700, color:"rgba(255,255,255,0.5)", fontFamily:"'Tajawal',sans-serif", display:"block", marginBottom:7 }}>اسم المشروع</label>
+              <label style={{ fontSize:13, fontWeight:700, color:"rgba(255,255,255,0.5)", fontFamily:"'Tajawal',sans-serif", display:"flex", marginBottom:7 }}>اسم المشروع</label>
               <input type="text" value={projectName}
                 onChange={e => { setProjectName(e.target.value); setError(""); }}
                 onKeyDown={e => e.key==="Enter" && handleCreate()}
