@@ -1,0 +1,9 @@
+{
+  "short_name": "Robot App",
+  "name": "Robot App",
+  "orientation": "landscape",
+  "display": "fullscreen",
+  "start_url": ".",
+  "theme_color": "#07090f",
+  "background_color": "#07090f"
+}
