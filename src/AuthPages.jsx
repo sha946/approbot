@@ -1,6 +1,30 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+// ── persist helper (internal only) ────────────────────────────
+function persistCurrentAccount() {
+  try {
+    const token = localStorage.getItem("token");
+    const user  = JSON.parse(localStorage.getItem("user") || "null");
+    if (token && user?.username) {
+      const accounts = (() => {
+        try { return JSON.parse(localStorage.getItem("saved_accounts") || "[]"); } catch { return []; }
+      })();
+      const entry = {
+        username:  user.username  || "مستخدم",
+        name:      user.name      || user.username || "مستخدم",
+        avatar:    user.avatar    || "🤖",
+        avatarBg:  user.avatarBg  || "#6C63FF",
+        token,
+      };
+      const existing = accounts.findIndex(a => a.username === user.username);
+      if (existing >= 0) accounts[existing] = entry;
+      else accounts.unshift(entry);
+      localStorage.setItem("saved_accounts", JSON.stringify(accounts));
+    }
+  } catch {}
+}
+
 const RobotLogo = () => (
   <svg width="56" height="56" viewBox="0 0 64 64" fill="none">
     <rect x="16" y="20" width="32" height="28" rx="6" fill="#6C63FF" stroke="#fff" strokeWidth="2"/>
@@ -60,15 +84,16 @@ export function CreateAccountPage() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.message); return; }
+      // ── FIX: set token AND user first, then persist once ──
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
+      persistCurrentAccount();
       navigate('/home');
     } catch { setError("تعذّر الاتصال بالخادم"); }
   };
 
   return (
     <Page>
-      {/* Portrait: single column card. Landscape: logo left + form right */}
       <div className="auth-layout">
         <div className="auth-logo-col">
           <RobotLogo />
@@ -109,8 +134,10 @@ export function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.message); return; }
+      // ── FIX: set token AND user first, then persist ──
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
+      persistCurrentAccount();
       navigate('/home');
     } catch { setError("تعذّر الاتصال بالخادم"); }
   };
@@ -150,7 +177,6 @@ function Page({ children }) {
         input::placeholder { color: rgba(255,255,255,0.2); }
         @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
 
-        /* Scrollable full page */
         .auth-page-wrap {
           min-height: 100vh; width: 100%;
           background: radial-gradient(ellipse at 30% 40%, #0e0a2a 0%, #07090f 65%);
@@ -159,7 +185,6 @@ function Page({ children }) {
           direction: rtl;
           overflow-y: auto;
           overflow-x: hidden;
-          /* Custom scrollbar */
           scrollbar-width: thin;
           scrollbar-color: rgba(108,99,255,0.5) rgba(255,255,255,0.05);
         }
@@ -167,7 +192,6 @@ function Page({ children }) {
         .auth-page-wrap::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); border-radius: 3px; }
         .auth-page-wrap::-webkit-scrollbar-thumb { background: rgba(108,99,255,0.5); border-radius: 3px; }
 
-        /* Card */
         .auth-card {
           width: 100%; max-width: 820px;
           background: rgba(22,27,34,0.88);
@@ -179,12 +203,8 @@ function Page({ children }) {
           animation: fadeUp 0.45s cubic-bezier(.4,1.2,.6,1) both;
         }
 
-        /* Portrait: stack vertically */
         .auth-layout {
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-          width: 100%;
+          display: flex; flex-direction: column; gap: 20px; width: 100%;
         }
         .auth-logo-col {
           display: flex; flex-direction: column; align-items: center;
@@ -192,17 +212,11 @@ function Page({ children }) {
         }
         .auth-form-col { width: 100%; }
 
-        /* Landscape (short screens or wide phones in landscape) */
         @media (orientation: landscape) and (max-height: 520px),
                (min-width: 640px) {
-          .auth-layout {
-            flex-direction: row;
-            align-items: center;
-            gap: 32px;
-          }
+          .auth-layout { flex-direction: row; align-items: center; gap: 32px; }
           .auth-logo-col {
-            flex: 0 0 200px;
-            min-width: 160px;
+            flex: 0 0 200px; min-width: 160px;
             border-left: 1px solid rgba(255,255,255,0.07);
             padding-left: 28px;
           }

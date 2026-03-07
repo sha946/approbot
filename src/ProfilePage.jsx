@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useProfile, Avatar } from "./useProfile";
 
@@ -15,46 +15,115 @@ const AVATARS = [
   { emoji: "💎", bg: "#00ACC1" }, { emoji: "🎯", bg: "#D84315" },
 ];
 
+const API = "https://my-backend-production-64d0.up.railway.app";
+
 const ArrowBackIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
     <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
   </svg>
 );
 
+// ── Call backend to update avatar/name, then sync localStorage ──
+async function saveProfileToServer(updates) {
+  const token = localStorage.getItem("token");
+  const res = await fetch(`${API}/api/user/profile`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error("فشل الحفظ");
+  return res.json(); // returns updated user from DB
+}
+
 export default function ProfilePage() {
   const navigate = useNavigate();
   const { getProfile, setProfile } = useProfile();
-  const [profile, setLocal] = useState(getProfile());
-  const [editing, setEditing] = useState(false);
-  const [editName, setEditName] = useState(profile.name);
-  const [editUsername, setEditUsername] = useState(profile.username);
-  const [showPicker, setShowPicker] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
+  const [profile,     setLocal]      = useState(getProfile());
+  const [editing,     setEditing]    = useState(false);
+  const [editName,    setEditName]   = useState(profile.name);
+  const [editUsername,setEditUsername] = useState(profile.username);
+  const [showPicker,  setShowPicker] = useState(false);
+  const [saved,       setSaved]      = useState(false);
+  const [saving,      setSaving]     = useState(false);
+  const [error,       setError]      = useState("");
 
-  // ── Per-user projects ──────────────────────────────────────────
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
   const projectsKey = `projects_${currentUser?.username || "guest"}`;
   const allProjects = JSON.parse(localStorage.getItem(projectsKey) || "[]");
 
-  const handleSave = () => {
-    if (!editName.trim() || !editUsername.trim()) { setError("يرجى ملء جميع الحقول"); return; }
-    const updated = { ...profile, name: editName.trim(), username: editUsername.trim() };
-    setProfile(updated);
-    setLocal(updated);
-    setEditing(false);
+  // ── On mount: fetch latest profile from server so avatar is always fresh ──
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    fetch(`${API}/api/user/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(user => {
+        if (user?._id) {
+          const updated = {
+            username: user.username,
+            name:     user.name,
+            avatar:   user.avatar   || "🤖",
+            avatarBg: user.avatarBg || "#6C63FF",
+          };
+          setProfile(updated);
+          setLocal(updated);
+        }
+      })
+      .catch(() => {}); // silently fallback to localStorage if offline
+  }, []);
+
+  const handleSave = async () => {
+    if (!editName.trim()) { setError("يرجى ملء جميع الحقول"); return; }
+    setSaving(true);
     setError("");
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    try {
+      const updatedUser = await saveProfileToServer({ name: editName.trim() });
+      const updated = { ...profile, name: updatedUser.name };
+      // sync localStorage
+      setProfile(updated);
+      setLocal(updated);
+      const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+      localStorage.setItem("user", JSON.stringify({ ...storedUser, name: updatedUser.name }));
+      setEditing(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      setError("تعذّر الحفظ، تحقق من الاتصال");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handlePickAvatar = (av) => {
-    const updated = { ...profile, avatar: av.emoji, avatarBg: av.bg };
-    setProfile(updated);
-    setLocal(updated);
+  const handlePickAvatar = async (av) => {
     setShowPicker(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setSaving(true);
+    try {
+      const updatedUser = await saveProfileToServer({ avatar: av.emoji, avatarBg: av.bg });
+      const updated = {
+        ...profile,
+        avatar:   updatedUser.avatar,
+        avatarBg: updatedUser.avatarBg,
+      };
+      // sync localStorage so AccountMenu also sees the new avatar immediately
+      setProfile(updated);
+      setLocal(updated);
+      // also update saved_accounts entry so switcher shows new avatar
+      const accounts = JSON.parse(localStorage.getItem("saved_accounts") || "[]");
+      const idx = accounts.findIndex(a => a.username === profile.username);
+      if (idx >= 0) {
+        accounts[idx].avatar   = updatedUser.avatar;
+        accounts[idx].avatarBg = updatedUser.avatarBg;
+        localStorage.setItem("saved_accounts", JSON.stringify(accounts));
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      setError("تعذّر حفظ الصورة، تحقق من الاتصال");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -69,19 +138,24 @@ export default function ProfilePage() {
         @keyframes savedPop { 0%{opacity:0;transform:translateY(10px)} 20%{opacity:1;transform:translateY(0)} 80%{opacity:1} 100%{opacity:0} }
         .avatar-option { transition: transform 0.15s, box-shadow 0.15s; cursor:pointer; }
         .avatar-option:hover { transform: scale(1.12); }
+        .back-btn:hover { background: rgba(255,255,255,0.15) !important; }
+        .edit-btn:hover { background: rgba(108,99,255,0.25) !important; }
+        .cancel-btn:hover { background: rgba(255,255,255,0.1) !important; }
       `}</style>
 
       <div style={{ minHeight:"100vh", background:"radial-gradient(ellipse at 30% 20%,#0e0a2a 0%,#07090f 60%)", fontFamily:"'Tajawal',sans-serif", color:"#fff", direction:"rtl" }}>
 
         {/* App bar */}
         <div style={{ height:60, background:"rgba(22,27,34,0.98)", borderBottom:"1px solid rgba(255,255,255,0.08)", display:"flex", alignItems:"center", padding:"0 20px", gap:12, position:"sticky", top:0, zIndex:100, boxShadow:"0 2px 20px rgba(0,0,0,0.5)" }}>
-          <button onClick={() => navigate(-1)} style={{ background:"rgba(255,255,255,0.08)", border:"none", color:"#fff", borderRadius:12, width:40, height:40, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}
-            onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,0.15)"}
-            onMouseLeave={e => e.currentTarget.style.background="rgba(255,255,255,0.08)"}
-          ><ArrowBackIcon /></button>
+          <button className="back-btn" onClick={() => navigate(-1)} style={{ background:"rgba(255,255,255,0.08)", border:"none", color:"#fff", borderRadius:12, width:40, height:40, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", transition:"background 0.15s" }}>
+            <ArrowBackIcon />
+          </button>
           <span style={{ fontFamily:"'Fredoka One',cursive", fontSize:20, background:"linear-gradient(90deg,#6C63FF,#00E5FF)", backgroundClip:"text", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
             الملف الشخصي
           </span>
+          {saving && (
+            <span style={{ marginRight:"auto", fontSize:12, color:"rgba(255,255,255,0.4)", fontWeight:600 }}>جاري الحفظ...</span>
+          )}
         </div>
 
         {/* Content */}
@@ -90,16 +164,19 @@ export default function ProfilePage() {
 
             {/* Avatar */}
             <div style={{ position:"relative", display:"inline-block", marginBottom:16 }}>
-              <div style={{ width:96, height:96, borderRadius:"50%", background:profile.avatarBg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:48, border:"3px solid rgba(255,255,255,0.15)", boxShadow:`0 8px 32px ${profile.avatarBg}66` }}>
+              <div style={{ width:96, height:96, borderRadius:"50%", background:profile.avatarBg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:48, border:"3px solid rgba(255,255,255,0.15)", boxShadow:`0 8px 32px ${profile.avatarBg}66`, transition:"all 0.3s" }}>
                 {profile.avatar}
               </div>
-              <button onClick={() => setShowPicker(true)} style={{ position:"absolute", bottom:0, right:0, width:30, height:30, borderRadius:"50%", background:"#6C63FF", border:"2px solid #07090f", color:"#fff", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14 }}>✏️</button>
+              <button
+                onClick={() => setShowPicker(true)}
+                style={{ position:"absolute", bottom:0, right:0, width:30, height:30, borderRadius:"50%", background:"#6C63FF", border:"2px solid #07090f", color:"#fff", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14 }}
+              >✏️</button>
             </div>
 
             <div style={{ fontFamily:"'Tajawal',sans-serif", fontSize:22, fontWeight:900, color:"#fff", marginBottom:4 }}>{profile.name}</div>
             <div style={{ fontSize:14, color:"rgba(255,255,255,0.4)", fontWeight:600, marginBottom:24 }}>@{profile.username}</div>
 
-            {/* Stats — per user */}
+            {/* Stats */}
             <div style={{ display:"flex", justifyContent:"center", gap:32, marginBottom:24 }}>
               {[
                 { label:"المشاريع", value: allProjects.length },
@@ -113,27 +190,37 @@ export default function ProfilePage() {
               ))}
             </div>
 
-            {/* Edit */}
+            {/* Edit form */}
             {!editing ? (
-              <button onClick={() => { setEditing(true); setEditName(profile.name); setEditUsername(profile.username); }}
-                style={{ padding:"10px 28px", background:"rgba(108,99,255,0.15)", border:"1.5px solid rgba(108,99,255,0.4)", color:"#a78bfa", borderRadius:12, fontSize:14, fontWeight:800, cursor:"pointer", fontFamily:"'Tajawal',sans-serif", transition:"all 0.2s" }}
-                onMouseEnter={e => e.currentTarget.style.background="rgba(108,99,255,0.25)"}
-                onMouseLeave={e => e.currentTarget.style.background="rgba(108,99,255,0.15)"}
+              <button
+                className="edit-btn"
+                onClick={() => { setEditing(true); setEditName(profile.name); setEditUsername(profile.username); }}
+                style={{ padding:"10px 28px", background:"rgba(108,99,255,0.15)", border:"1.5px solid rgba(108,99,255,0.4)", color:"#a78bfa", borderRadius:12, fontSize:14, fontWeight:800, cursor:"pointer", fontFamily:"'Tajawal',sans-serif", transition:"background 0.2s" }}
               >✏️ تعديل الملف الشخصي</button>
             ) : (
               <div style={{ display:"flex", flexDirection:"column", gap:12, textAlign:"right" }}>
                 <div>
                   <label style={{ fontSize:12, color:"rgba(255,255,255,0.45)", fontWeight:700, display:"block", marginBottom:6 }}>الاسم الكامل</label>
-                  <input value={editName} onChange={e => setEditName(e.target.value)} style={{ width:"100%", padding:"11px 14px", background:"rgba(255,255,255,0.05)", border:"1.5px solid rgba(108,99,255,0.4)", borderRadius:12, color:"#fff", fontSize:14, fontFamily:"'Tajawal',sans-serif", outline:"none", direction:"rtl" }} />
+                  <input value={editName} onChange={e => setEditName(e.target.value)}
+                    style={{ width:"100%", padding:"11px 14px", background:"rgba(255,255,255,0.05)", border:"1.5px solid rgba(108,99,255,0.4)", borderRadius:12, color:"#fff", fontSize:14, fontFamily:"'Tajawal',sans-serif", outline:"none", direction:"rtl" }} />
                 </div>
                 <div>
                   <label style={{ fontSize:12, color:"rgba(255,255,255,0.45)", fontWeight:700, display:"block", marginBottom:6 }}>اسم المستخدم</label>
-                  <input value={editUsername} onChange={e => setEditUsername(e.target.value)} style={{ width:"100%", padding:"11px 14px", background:"rgba(255,255,255,0.05)", border:"1.5px solid rgba(108,99,255,0.4)", borderRadius:12, color:"#fff", fontSize:14, fontFamily:"'Tajawal',sans-serif", outline:"none", direction:"rtl" }} />
+                  <input value={editUsername} disabled
+                    title="لا يمكن تغيير اسم المستخدم"
+                    style={{ width:"100%", padding:"11px 14px", background:"rgba(255,255,255,0.03)", border:"1.5px solid rgba(255,255,255,0.07)", borderRadius:12, color:"rgba(255,255,255,0.35)", fontSize:14, fontFamily:"'Tajawal',sans-serif", outline:"none", direction:"rtl", cursor:"not-allowed" }} />
+                  <div style={{ fontSize:11, color:"rgba(255,255,255,0.25)", marginTop:4, fontWeight:600 }}>اسم المستخدم لا يمكن تغييره</div>
                 </div>
                 {error && <div style={{ color:"#FF6B6B", fontSize:12, fontWeight:700 }}>⚠️ {error}</div>}
                 <div style={{ display:"flex", gap:8 }}>
-                  <button onClick={() => { setEditing(false); setError(""); }} style={{ flex:1, padding:"10px 0", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.6)", borderRadius:12, fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"'Tajawal',sans-serif" }}>إلغاء</button>
-                  <button onClick={handleSave} style={{ flex:2, padding:"10px 0", background:"linear-gradient(135deg,#6C63FF,#9C63FF)", border:"none", color:"#fff", borderRadius:12, fontSize:14, fontWeight:800, cursor:"pointer", fontFamily:"'Tajawal',sans-serif", boxShadow:"0 4px 16px rgba(108,99,255,0.4)" }}>حفظ التغييرات ✓</button>
+                  <button className="cancel-btn" onClick={() => { setEditing(false); setError(""); }}
+                    style={{ flex:1, padding:"10px 0", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.6)", borderRadius:12, fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"'Tajawal',sans-serif", transition:"background 0.15s" }}>
+                    إلغاء
+                  </button>
+                  <button onClick={handleSave} disabled={saving}
+                    style={{ flex:2, padding:"10px 0", background: saving ? "rgba(108,99,255,0.4)" : "linear-gradient(135deg,#6C63FF,#9C63FF)", border:"none", color:"#fff", borderRadius:12, fontSize:14, fontWeight:800, cursor: saving ? "not-allowed" : "pointer", fontFamily:"'Tajawal',sans-serif", boxShadow:"0 4px 16px rgba(108,99,255,0.4)" }}>
+                    {saving ? "جاري الحفظ..." : "حفظ التغييرات ✓"}
+                  </button>
                 </div>
               </div>
             )}
@@ -164,7 +251,8 @@ export default function ProfilePage() {
                   </div>
                 ))}
               </div>
-              <button onClick={() => setShowPicker(false)} style={{ marginTop:20, width:"100%", padding:"11px 0", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.6)", borderRadius:12, fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"'Tajawal',sans-serif" }}>
+              <button className="cancel-btn" onClick={() => setShowPicker(false)}
+                style={{ marginTop:20, width:"100%", padding:"11px 0", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.6)", borderRadius:12, fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"'Tajawal',sans-serif", transition:"background 0.15s" }}>
                 إلغاء
               </button>
             </div>
