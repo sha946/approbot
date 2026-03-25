@@ -2,11 +2,13 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { saveDraw, loadDraw } from "./api";
 
+
+
 const ArrowBackIcon  = () => (<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>);
 const TrashIcon      = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>);
 const UndoIcon       = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>);
 const PlayIcon       = () => (<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>);
-const BluetoothIcon  = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"/></svg>);
+const WifiIcon       = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>);
 const PenIcon        = () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>);
 const EraserIcon     = () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M15.14 3c-.51 0-1.02.2-1.41.59L2.59 14.73c-.78.77-.78 2.04 0 2.83L5.03 20h7.66l8.72-8.72c.79-.78.79-2.05 0-2.83l-4.85-4.86c-.39-.39-.9-.59-1.42-.59zM6 20l-2-2 5-5 2 2-5 5z"/></svg>);
 const SaveIcon       = () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>);
@@ -63,18 +65,6 @@ function pathToCommands(strokes, speedPct = 60) {
   return commands;
 }
 
-const BLE_SERVICE = "0000ffe0-0000-1000-8000-00805f9b34fb";
-const BLE_CHAR    = "0000ffe1-0000-1000-8000-00805f9b34fb";
-
-async function sendChunked(characteristic, fullString) {
-  const encoder = new TextEncoder();
-  const chunkSize = 20;
-  for (let i = 0; i < fullString.length; i += chunkSize) {
-    await characteristic.writeValue(encoder.encode(fullString.slice(i, i+chunkSize)));
-    await new Promise(r => setTimeout(r, 50));
-  }
-}
-
 export default function DrawApp() {
   const navigate    = useNavigate();
   const location    = useLocation();
@@ -92,9 +82,7 @@ export default function DrawApp() {
   const [penColor,    setPenColor]   = useState("#00E5FF");
   const [penSize,     setPenSize]    = useState(5);
   const [speed,       setSpeed]      = useState(60);
-  const [btDevice,    setBtDevice]   = useState(null);
-  const [btChar,      setBtChar]     = useState(null);
-  const [btStatus,    setBtStatus]   = useState("disconnected");
+  const [connected,   setConnected]  = useState(false);
   const [sendStatus,  setSendStatus] = useState("");
   const [saveStatus,  setSaveStatus] = useState("");
   const [showPanel,   setShowPanel]  = useState(false);
@@ -120,13 +108,11 @@ export default function DrawApp() {
     }
   }, []);
 
-  // Keep ref in sync + redraw on state change
   useEffect(() => {
     strokesRef.current = strokes;
     redrawAll(strokes);
   }, [strokes, redrawAll]);
 
-  // Resize — uses ref so it never sees stale strokes
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -144,7 +130,6 @@ export default function DrawApp() {
     return () => window.removeEventListener("resize", resize);
   }, [redrawAll]);
 
-  // Load from backend
   useEffect(() => {
     if (!projectId) { setLoadingData(false); return; }
     loadDraw(projectId)
@@ -158,6 +143,21 @@ export default function DrawApp() {
       .catch(() => {})
       .finally(() => setLoadingData(false));
   }, [projectId]);
+
+  // ── Check WiFi connection to ESP32 ───────────────────────────────
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const res = await fetch(`http://${ESP32_IP}/ping`, { signal: AbortSignal.timeout(2000) });
+        setConnected(res.ok);
+      } catch {
+        setConnected(false);
+      }
+    };
+    check();
+    const interval = setInterval(check, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   // ── Drawing ──────────────────────────────────────────────────────
   const getPos = (e) => {
@@ -214,35 +214,32 @@ export default function DrawApp() {
     }
   };
 
-  // ── Bluetooth ────────────────────────────────────────────────────
-  const handleConnect = async () => {
-    try {
-      setBtStatus("connecting");
-      const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [BLE_SERVICE] }], optionalServices: [BLE_SERVICE] });
-      device.addEventListener("gattserverdisconnected", () => { setBtStatus("disconnected"); setBtChar(null); setBtDevice(null); });
-      const server  = await device.gatt.connect();
-      const service = await server.getPrimaryService(BLE_SERVICE);
-      const char    = await service.getCharacteristic(BLE_CHAR);
-      setBtDevice(device); setBtChar(char); setBtStatus("connected");
-    } catch { setBtStatus("disconnected"); }
-  };
-  const handleDisconnect = () => { btDevice?.gatt?.disconnect(); setBtStatus("disconnected"); setBtChar(null); setBtDevice(null); };
-
+  // ── WiFi Send ────────────────────────────────────────────────────
   const handleSend = async () => {
-    if (!btChar) { alert("وصّل الروبوت أولاً عبر البلوتوث!"); return; }
     const penStrokes = strokes.filter(s => !s.isEraser).map(s => s.points);
     if (penStrokes.length === 0) { alert("ارسم مساراً أولاً!"); return; }
     const cmds = pathToCommands(penStrokes, speed);
     try {
       setSendStatus("sending");
-      await sendChunked(btChar, cmds.join(""));
-      setSendStatus("done");
+      const res = await fetch(`http://${ESP32_IP}/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commands: cmds }),
+      });
+      if (res.ok) {
+        setSendStatus("done");
+      } else {
+        setSendStatus("error");
+      }
+    } catch {
+      setSendStatus("error");
+    } finally {
       setTimeout(() => setSendStatus(""), 3000);
-    } catch { setSendStatus("error"); setTimeout(() => setSendStatus(""), 3000); }
+    }
   };
 
-  const btColor = btStatus === "connected" ? "#00C853" : btStatus === "connecting" ? "#f4b400" : "#aaa";
-  const COLORS  = ["#00E5FF","#FFEB3B","#FF6B6B","#00C853","#FF9800","#CE93D8","#ffffff"];
+  const wifiColor  = connected ? "#00C853" : "#aaa";
+  const COLORS     = ["#00E5FF","#FFEB3B","#FF6B6B","#00C853","#FF9800","#CE93D8","#ffffff"];
   const penStrokes = strokes.filter(s => !s.isEraser);
 
   return (
@@ -290,10 +287,11 @@ export default function DrawApp() {
               {projectName}
             </span>
           </div>
-          <div style={{ display:"flex", alignItems:"center", gap:6, background:"rgba(255,255,255,0.05)", border:`1px solid ${btColor}40`, borderRadius:20, padding:"5px 10px" }}>
-            <div style={{ width:8, height:8, borderRadius:"50%", background:btColor, animation:btStatus==="connected"?"pulse-green 2s infinite":"none", flexShrink:0 }}/>
-            <span style={{ fontSize:11, fontWeight:700, color:btColor, whiteSpace:"nowrap" }}>
-              {btStatus==="connected" ? "متصل" : btStatus==="connecting" ? "..." : "غير متصل"}
+          {/* WiFi status indicator */}
+          <div style={{ display:"flex", alignItems:"center", gap:6, background:"rgba(255,255,255,0.05)", border:`1px solid ${wifiColor}40`, borderRadius:20, padding:"5px 10px" }}>
+            <div style={{ width:8, height:8, borderRadius:"50%", background:wifiColor, animation:connected?"pulse-green 2s infinite":"none", flexShrink:0 }}/>
+            <span style={{ fontSize:11, fontWeight:700, color:wifiColor, whiteSpace:"nowrap" }}>
+              {connected ? "متصل" : "غير متصل"}
             </span>
           </div>
         </div>
@@ -341,31 +339,33 @@ export default function DrawApp() {
               onMouseDown={onPointerDown} onMouseMove={onPointerMove} onMouseUp={onPointerUp} onMouseLeave={onPointerUp}
               onTouchStart={onPointerDown} onTouchMove={onPointerMove} onTouchEnd={onPointerUp}
             />
-            {saveStatus === "saved" && (
-              <div style={{ position:"absolute", bottom:20, left:"50%", transform:"translateX(-50%)", background:"rgba(108,99,255,0.95)", border:"1px solid #a78bfa", borderRadius:12, padding:"10px 22px", fontSize:14, fontWeight:800, color:"#fff", animation:"popIn 0.25s ease", display:"flex", alignItems:"center", gap:8, boxShadow:"0 4px 20px rgba(108,99,255,0.5)", whiteSpace:"nowrap", zIndex:10 }}>
-                ✅ تم حفظ المشروع!
-              </div>
-            )}
-            {saveStatus === "error" && (
-              <div style={{ position:"absolute", bottom:20, left:"50%", transform:"translateX(-50%)", background:"rgba(255,107,107,0.95)", border:"1px solid #FF6B6B", borderRadius:12, padding:"10px 22px", fontSize:14, fontWeight:800, color:"#fff", animation:"popIn 0.25s ease", display:"flex", alignItems:"center", gap:8, whiteSpace:"nowrap", zIndex:10 }}>
-                ❌ فشل الحفظ، تحقق من الاتصال
-              </div>
-            )}
           </div>
 
           {/* RIGHT PANEL — desktop */}
           <div className="right-panel" style={{ width:190, flexShrink:0, flexDirection:"column", padding:12, gap:12, borderLeft:"1px solid rgba(255,255,255,0.06)", background:"rgba(22,27,34,0.85)", zIndex:10, overflowY:"auto" }}>
-            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, background:"rgba(0,200,83,0.07)", border:"1.5px solid rgba(0,200,83,0.2)", borderRadius:14, padding:12 }}>
+            {/* Robot + WiFi status card */}
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, background: connected ? "rgba(0,200,83,0.07)" : "rgba(255,255,255,0.04)", border:`1.5px solid ${connected ? "rgba(0,200,83,0.2)" : "rgba(255,255,255,0.08)"}`, borderRadius:14, padding:12, transition:"all 0.3s" }}>
               <div style={{ animation:"float 3s ease-in-out infinite" }}><RobotFaceIcon /></div>
-              <div style={{ fontSize:12, fontWeight:700, color:btStatus==="connected"?"#00C853":"#aaa", textAlign:"center" }}>
-                {btStatus==="connected" ? "✓ الروبوت جاهز!" : "غير متصل"}
+              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                <div style={{ width:8, height:8, borderRadius:"50%", background:wifiColor, animation:connected?"pulse-green 2s infinite":"none" }}/>
+                <span style={{ fontSize:12, fontWeight:700, color:wifiColor, textAlign:"center" }}>
+                  {connected ? "✓ الروبوت جاهز!" : "غير متصل"}
+                </span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, color:"rgba(255,255,255,0.3)", fontWeight:600 }}>
+                <WifiIcon />
+                
               </div>
             </div>
+
+            {/* Speed */}
             <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:12 }}>
               <div style={{ fontSize:11, color:"#aaa", fontWeight:700, marginBottom:8, textTransform:"uppercase", letterSpacing:1 }}>السرعة</div>
               <input type="range" min={20} max={100} value={speed} onChange={e => setSpeed(+e.target.value)} style={{ width:"100%", accentColor:"#00C853", cursor:"pointer" }} />
               <div style={{ textAlign:"center", fontSize:18, fontWeight:900, color:"#00C853", fontFamily:"'Fredoka One',cursive", marginTop:4 }}>{speed}%</div>
             </div>
+
+            {/* Stats */}
             <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:12, display:"flex", flexDirection:"column", gap:8 }}>
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:13 }}>
                 <span style={{ color:"#aaa", fontWeight:600 }}>الخطوط</span>
@@ -376,54 +376,45 @@ export default function DrawApp() {
                 <span style={{ color:"#f4b400", fontWeight:800 }}>{pathToCommands(penStrokes.map(s => s.points), speed).length}</span>
               </div>
             </div>
+
             <div style={{ flex:1 }}/>
-            <button onClick={handleSave} style={{ background:"rgba(108,99,255,0.15)", border:"1.5px solid rgba(108,99,255,0.4)", color:"#a78bfa", borderRadius:12, padding:"9px 0", fontSize:13, fontWeight:800, cursor:"pointer", fontFamily:"'Tajawal',sans-serif", display:"flex", alignItems:"center", justifyContent:"center", gap:7, width:"100%", touchAction:"manipulation" }}>
-              <SaveIcon /> حفظ
+
+            {/* Save */}
+            <button onClick={handleSave} style={{ background: saveStatus==="saved" ? "linear-gradient(135deg,#00C853,#00897B)" : "linear-gradient(135deg,#1565c0,#0d47a1)", border:"none", color:"#fff", borderRadius:12, padding:"9px 0", fontSize:13, fontWeight:800, cursor:"pointer", fontFamily:"'Tajawal',sans-serif", display:"flex", alignItems:"center", justifyContent:"center", gap:7, width:"100%", touchAction:"manipulation", transition:"background 0.3s", boxShadow: saveStatus==="saved" ? "0 3px 12px rgba(0,200,83,0.4)" : "" }}>
+              {saveStatus==="saved" ? "✓ تم الحفظ!" : <><SaveIcon /> حفظ</>}
             </button>
-            {btStatus !== "connected" ? (
-              <button onClick={handleConnect} disabled={btStatus==="connecting"} style={{ background:"linear-gradient(135deg,#1565c0,#0d47a1)", border:"none", color:"#fff", borderRadius:12, padding:"10px 0", fontSize:13, fontWeight:800, cursor:"pointer", fontFamily:"'Tajawal',sans-serif", display:"flex", alignItems:"center", justifyContent:"center", gap:8, opacity:btStatus==="connecting"?0.7:1, touchAction:"manipulation" }}>
-                {btStatus==="connecting" ? <><span style={{ width:14, height:14, border:"2px solid #fff", borderTopColor:"transparent", borderRadius:"50%", animation:"spin 0.7s linear infinite", display:"inline-block" }}/> جاري...</> : <><BluetoothIcon /> ربط البلوتوث</>}
-              </button>
-            ) : (
-              <button onClick={handleDisconnect} style={{ background:"rgba(255,107,107,0.15)", border:"1px solid rgba(255,107,107,0.4)", color:"#FF6B6B", borderRadius:12, padding:"10px 0", fontSize:13, fontWeight:800, cursor:"pointer", fontFamily:"'Tajawal',sans-serif", touchAction:"manipulation" }}>🔌 قطع الاتصال</button>
-            )}
+
+            {/* Send */}
             <button className="send-btn" onClick={handleSend} disabled={sendStatus==="sending" || penStrokes.length===0} style={{ padding:"12px 0", width:"100%" }}>
-              {sendStatus==="sending" ? <><span style={{ width:16, height:16, border:"2px solid #fff", borderTopColor:"transparent", borderRadius:"50%", animation:"spin 0.7s linear infinite", display:"inline-block" }}/> إرسال...</> : sendStatus==="done" ? "✅ تم!" : sendStatus==="error" ? "❌ خطأ" : <><PlayIcon /> أرسل للروبوت</>}
+              {sendStatus==="sending"
+                ? <><span style={{ width:16, height:16, border:"2px solid #fff", borderTopColor:"transparent", borderRadius:"50%", animation:"spin 0.7s linear infinite", display:"inline-block" }}/> إرسال...</>
+                : sendStatus==="done"  ? "✓ تم!"
+                : sendStatus==="error" ? "✗ خطأ"
+                : <><PlayIcon /> أرسل للروبوت</>}
             </button>
           </div>
         </div>
 
         {/* ── BOTTOM BAR — mobile only ── */}
         <div className="bottom-bar" style={{ height:60, flexShrink:0, background:"rgba(22,27,34,0.98)", borderTop:"1px solid rgba(255,255,255,0.08)", alignItems:"center", justifyContent:"space-between", padding:"0 10px", gap:6, zIndex:100 }}>
-          {/* Drawing tools */}
           <button className={`tool-btn ${tool==="pen"?"active":""}`}    style={{ width:40, height:40 }} onClick={() => setTool("pen")}><PenIcon /></button>
           <button className={`tool-btn ${tool==="eraser"?"active":""}`} style={{ width:40, height:40 }} onClick={() => setTool("eraser")}><EraserIcon /></button>
           <button className="tool-btn" style={{ width:40, height:40 }} onClick={handleUndo}><UndoIcon /></button>
           <button className="tool-btn" style={{ width:40, height:40 }} onClick={handleClear}><TrashIcon /></button>
-
-          {/* Divider */}
           <div style={{ width:1, height:30, background:"rgba(255,255,255,0.1)", flexShrink:0 }}/>
-
-          {/* Save */}
           <button onClick={handleSave} className="tool-btn" style={{ width:40, height:40, borderColor:"rgba(108,99,255,0.5)", color:"#a78bfa" }}><SaveIcon /></button>
-
-          {/* Bluetooth */}
-          <button onClick={btStatus==="connected" ? handleDisconnect : handleConnect} className="tool-btn"
-            style={{ width:40, height:40, borderColor:`${btColor}60`, color:btColor, background: btStatus==="connected"?"rgba(0,200,83,0.12)":"rgba(255,255,255,0.06)" }}>
-            {btStatus==="connecting"
-              ? <span style={{ width:14, height:14, border:`2px solid ${btColor}`, borderTopColor:"transparent", borderRadius:"50%", animation:"spin 0.7s linear infinite", display:"inline-block" }}/>
-              : <BluetoothIcon />}
-          </button>
-
+          {/* WiFi status pill */}
+          <div style={{ display:"flex", alignItems:"center", gap:4, background:"rgba(255,255,255,0.05)", border:`1px solid ${wifiColor}40`, borderRadius:20, padding:"4px 8px", flexShrink:0 }}>
+            <div style={{ width:7, height:7, borderRadius:"50%", background:wifiColor, animation:connected?"pulse-green 2s infinite":"none" }}/>
+            <WifiIcon />
+          </div>
           {/* Send */}
           <button className="send-btn" onClick={handleSend} disabled={sendStatus==="sending" || penStrokes.length===0}
             style={{ padding:"0 14px", height:40, borderRadius:12, fontSize:13, flexShrink:0 }}>
             {sendStatus==="sending"
               ? <span style={{ width:14, height:14, border:"2px solid #fff", borderTopColor:"transparent", borderRadius:"50%", animation:"spin 0.7s linear infinite", display:"inline-block" }}/>
-              : sendStatus==="done" ? "✅" : sendStatus==="error" ? "❌" : <><PlayIcon /><span style={{ fontSize:12 }}>إرسال</span></>}
+              : sendStatus==="done" ? "✓" : sendStatus==="error" ? "✗" : <><PlayIcon /><span style={{ fontSize:12 }}>إرسال</span></>}
           </button>
-
-          {/* Settings (speed + color + pen size) */}
           <button onClick={() => setShowPanel(true)} className="tool-btn" style={{ width:40, height:40 }}><SettingsIcon /></button>
         </div>
 
@@ -433,10 +424,19 @@ export default function DrawApp() {
             <div onClick={() => setShowPanel(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:200 }} />
             <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"#161b22", borderTop:"1.5px solid rgba(0,200,83,0.3)", borderRadius:"22px 22px 0 0", padding:"20px 18px 36px", zIndex:210, animation:"slideUp 0.3s ease", display:"flex", flexDirection:"column", gap:14, maxHeight:"85vh", overflowY:"auto" }}>
 
-              {/* Header */}
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <span style={{ fontFamily:"'Fredoka One',cursive", fontSize:18, color:"#fff" }}>الإعدادات ⚙️</span>
                 <button onClick={() => setShowPanel(false)} style={{ background:"rgba(255,255,255,0.07)", border:"none", color:"#fff", borderRadius:10, width:34, height:34, cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+              </div>
+
+              {/* WiFi status in panel */}
+              <div style={{ display:"flex", alignItems:"center", gap:10, background: connected?"rgba(0,200,83,0.08)":"rgba(255,255,255,0.04)", border:`1px solid ${wifiColor}40`, borderRadius:12, padding:"10px 14px" }}>
+                <div style={{ width:10, height:10, borderRadius:"50%", background:wifiColor, animation:connected?"pulse-green 2s infinite":"none", flexShrink:0 }}/>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:wifiColor }}>{connected ? "✓ الروبوت متصل" : "الروبوت غير متصل"}</div>
+                  <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)", marginTop:2 }}></div>
+                </div>
+                <WifiIcon />
               </div>
 
               {/* Colors */}
@@ -465,28 +465,11 @@ export default function DrawApp() {
 
               <div style={{ height:1, background:"rgba(255,255,255,0.08)" }}/>
 
-              {/* Save button */}
               <button className="action-btn" onClick={() => { handleSave(); setShowPanel(false); }}
                 style={{ background:"rgba(108,99,255,0.15)", border:"1.5px solid rgba(108,99,255,0.4)", color:"#a78bfa" }}>
                 <SaveIcon /> حفظ المشروع
               </button>
 
-              {/* Bluetooth button */}
-              {btStatus !== "connected" ? (
-                <button className="action-btn" onClick={handleConnect} disabled={btStatus==="connecting"}
-                  style={{ background:"linear-gradient(135deg,#1565c0,#0d47a1)", color:"#fff", opacity:btStatus==="connecting"?0.7:1 }}>
-                  {btStatus==="connecting"
-                    ? <><span style={{ width:16, height:16, border:"2px solid #fff", borderTopColor:"transparent", borderRadius:"50%", animation:"spin 0.7s linear infinite", display:"inline-block" }}/> جاري الاتصال...</>
-                    : <><BluetoothIcon /> ربط البلوتوث</>}
-                </button>
-              ) : (
-                <button className="action-btn" onClick={handleDisconnect}
-                  style={{ background:"rgba(255,107,107,0.15)", border:"1px solid rgba(255,107,107,0.4)", color:"#FF6B6B" }}>
-                  🔌 قطع الاتصال
-                </button>
-              )}
-
-              {/* Send button */}
               <button className="send-btn action-btn" onClick={() => { handleSend(); setShowPanel(false); }}
                 disabled={sendStatus==="sending" || penStrokes.length===0}
                 style={{ padding:"13px 0" }}>

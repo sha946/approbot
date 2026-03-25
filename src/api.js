@@ -1,67 +1,63 @@
-const BASE = "https://my-backend-production-64d0.up.railway.app";
+const STORAGE_KEY = "robo_projects";
 
-function getToken() {
-  return localStorage.getItem("token") || "";
-}
-
-function authHeaders() {
-  return { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` };
-}
+const getAll = () => JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+const saveAll = (projects) => localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
 
 // ── Projects ─────────────────────────────────────────────────────
-export async function fetchProjects() {
-  const res = await fetch(`${BASE}/api/projects`, { headers: authHeaders() });
-  if (!res.ok) throw new Error("فشل تحميل المشاريع");
-  return res.json();
+export function fetchProjects() {
+  return Promise.resolve(getAll());
 }
 
-export async function createProject(name, type) {
-  const res = await fetch(`${BASE}/api/projects`, {
-    method: "POST", headers: authHeaders(),
-    body: JSON.stringify({ name, type }),
-  });
-  if (!res.ok) throw new Error("فشل إنشاء المشروع");
-  return res.json();
+export function createProject(name, type) {
+  const project = {
+    _id: Date.now().toString(),
+    name,
+    type,
+    createdAt: new Date().toISOString(),
+  };
+  const projects = getAll();
+  projects.unshift(project);
+  saveAll(projects);
+  return Promise.resolve(project);
 }
 
-export async function deleteProject(id) {
-  await fetch(`${BASE}/api/projects/${id}`, { method: "DELETE", headers: authHeaders() });
+export function deleteProject(id) {
+  saveAll(getAll().filter(p => p._id !== id));
+  return Promise.resolve({ success: true });
 }
 
-// Save blocks XML to backend
-export async function saveBlocks(id, blocksSave) {
-  const res = await fetch(`${BASE}/api/projects/${id}/blocks`, {
-    method: "PUT", headers: authHeaders(),
-    body: JSON.stringify({ blocksSave }),
-  });
-  if (!res.ok) throw new Error("فشل حفظ الكتل");
-  return res.json();
+// ── Blocks ────────────────────────────────────────────────────────
+export function saveBlocks(id, blocksSave) {
+  const projects = getAll().map(p => p._id === id ? { ...p, blocksSave } : p);
+  saveAll(projects);
+  return Promise.resolve({ blocksSave });
 }
 
-// Load blocks XML from backend — returns { blocksSave: "..." } or { blocksSave: "" }
-export async function loadBlocks(id) {
-  const res = await fetch(`${BASE}/api/projects/${id}/blocks`, {
-    headers: authHeaders(),
-  });
-  if (!res.ok) throw new Error("فشل تحميل الكتل");
-  return res.json();
+export function loadBlocks(id) {
+  const project = getAll().find(p => p._id === id);
+  return Promise.resolve({ blocksSave: project?.blocksSave || "" });
 }
 
-// Save draw — sends { drawSave: { strokes, speed } }
-export async function saveDraw(id, drawSave) {
-  const res = await fetch(`${BASE}/api/projects/${id}/draw`, {
-    method: "PUT", headers: authHeaders(),
-    body: JSON.stringify({ drawSave }),
-  });
-  if (!res.ok) throw new Error("فشل حفظ الرسم");
-  return res.json();
+// ── Draw ──────────────────────────────────────────────────────────
+export function saveDraw(id, drawSave) {
+  const projects = getAll().map(p => p._id === id ? { ...p, drawSave } : p);
+  saveAll(projects);
+  return Promise.resolve({ drawSave });
 }
 
-// Load draw — returns { drawSave: { strokes, speed } } or { drawSave: null }
-export async function loadDraw(id) {
-  const res = await fetch(`${BASE}/api/projects/${id}/draw`, {
-    headers: authHeaders(),
-  });
-  if (!res.ok) throw new Error("فشل تحميل الرسم");
-  return res.json();
+export function loadDraw(id) {
+  const project = getAll().find(p => p._id === id);
+  return Promise.resolve({ drawSave: project?.drawSave || null });
+}
+
+// ── Kids ──────────────────────────────────────────────────────────
+export function saveKids(id, kidsSave) {
+  const projects = getAll().map(p => p._id === id ? { ...p, kidsSave } : p);
+  saveAll(projects);
+  return Promise.resolve({ kidsSave });
+}
+
+export function loadKids(id) {
+  const project = getAll().find(p => p._id === id);
+  return Promise.resolve({ kidsSave: project?.kidsSave || null });
 }
